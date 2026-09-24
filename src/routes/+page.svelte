@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { authClient } from "$lib/client";
     import LoginForm from "$lib/components/login-form.svelte";
 </script>
 
+Welcome to Bevsoft.
 
-  <LoginForm/>
+Please login or signup

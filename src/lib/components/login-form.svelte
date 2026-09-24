@@ -6,6 +6,13 @@
     import { authClient } from "$lib/client";
 
 	const id = $props.id();
+	let email = $state("")
+	let password = $state("")
+
+	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+	let emailValid = $derived(emailRegex.test(email))
+	let passwordValid = $derived(password.length >= 8)
 </script>
 
 <Card.Root class="mx-auto w-full max-w-sm">
@@ -14,21 +21,23 @@
 		<Card.Description>Enter your email below to login to your account</Card.Description>
 	</Card.Header>
 	<Card.Content>
-		<form>
+		<form method="POST" action="?/login">
 			<FieldGroup>
 				<Field>
 					<FieldLabel for="email-{id}">Email</FieldLabel>
-					<Input id="email-{id}" type="email" placeholder="m@example.com" required />
+					<Input id="email-{id}" bind:value={email} name="email" type="email" placeholder="m@example.com" required />
 				</Field>
 				<Field>
 					<div class="flex items-center">
 						<FieldLabel for="password-{id}">Password</FieldLabel>
 						<a href="##" class="ms-auto inline-block text-sm underline"> Forgot your password? </a>
 					</div>
-					<Input id="password-{id}" type="password" required />
+					<Input id="password-{id}" bind:value={password} name="password" type="password" required />
 				</Field>
 				<Field>
-					<Button type="submit" class="w-full">Login</Button>
+					<Button type="submit" class="w-full" 
+						disabled={!emailValid || !passwordValid}>Login</Button>
+
 					<Button variant="outline" class="w-full" 
 						onclick={async () => {
 							await authClient.signIn.social({

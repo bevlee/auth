@@ -16,8 +16,17 @@
 	let validName = $derived(name.length > 1)
 	let validEmail = $derived(emailRegex.test(email))
 	let validPassword = $derived(password.length >= 8)
-	let passwordsMatch = $derived(password.length >= 8 && confirmPassword.length > 8 && password === confirmPassword)
+	let passwordsMatch = $derived(password.length >= 8 && confirmPassword.length >= 8 && password === confirmPassword)
 	let hasError = $derived(!passwordsMatch || !validName || !validEmail || !validPassword)
+
+	$effect(() => {
+		console.log("hasError", hasError, {
+			validName,
+			validEmail,
+			validPassword,
+			passwordsMatch
+		});
+	});
 </script>
 
 <Card.Root {...restProps}>
