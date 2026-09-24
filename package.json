@@ -35,6 +35,7 @@
 	"dependencies": {
 		"better-auth": "^1.7.5",
 		"better-sqlite3": "^13.0.3",
+		"resend": "^6.28.1",
 		"zod": "^4.6.5"
 	}
 }

@@ -11,8 +11,8 @@
 
 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-	let emailValid = $derived(emailRegex.test(email))
-	let passwordValid = $derived(password.length >= 8)
+	let validEmail = $derived(emailRegex.test(email))
+	let validPassword = $derived(password.length >= 8)
 </script>
 
 <Card.Root class="mx-auto w-full max-w-sm">
@@ -30,13 +30,13 @@
 				<Field>
 					<div class="flex items-center">
 						<FieldLabel for="password-{id}">Password</FieldLabel>
-						<a href="##" class="ms-auto inline-block text-sm underline"> Forgot your password? </a>
 					</div>
 					<Input id="password-{id}" bind:value={password} name="password" type="password" required />
+					<a href="/request-password-reset" class="ms-auto inline-block text-sm underline"> Forgot your password? </a>
 				</Field>
 				<Field>
 					<Button type="submit" class="w-full" 
-						disabled={!emailValid || !passwordValid}>Login</Button>
+						disabled={!validEmail || !validPassword}>Login</Button>
 
 					<Button variant="outline" class="w-full" 
 						onclick={async () => {
