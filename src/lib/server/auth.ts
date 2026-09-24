@@ -16,4 +16,10 @@ export const auth = betterAuth({
         }, 
   }, 
 	plugins: [sveltekitCookies(getRequestEvent)],
+  advanced: {
+    crossSubDomainCookies: {
+      enabled: true,
+      domain: ".bevsoft.com"
+    }
+  }
 })
