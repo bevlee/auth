@@ -9,11 +9,13 @@ import { getRequestEvent } from "$app/server";
 import { sveltekitCookies } from "better-auth/svelte-kit";
 
 export const auth = betterAuth({
+  baseURL: env.BETTER_AUTH_URL,
+  secret: env.BETTER_AUTH_SECRET,
   database: new Database("./sqlite.db"), 
   emailAndPassword: { 
     enabled: true,
     sendResetPassword: async ({user, url, token}) => {
-      const { data, error} = await resend.emails.send({
+      void resend.emails.send({
         from: env.AUTH_EMAIL,
         to: user.email,
         subject: "Reset your password",
@@ -22,10 +24,6 @@ export const auth = betterAuth({
             <a href="${url}">${url}</a>
           </p>`
       });
-
-      if (error) {
-        console.log("no good", error)
-      }
     },
     onPasswordReset: async ({ user}, request) => {
       console.log(`Password for user ${user.email} has been reset`)

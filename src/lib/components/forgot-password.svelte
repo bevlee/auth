@@ -4,7 +4,7 @@
 	import { Button } from "$lib/components/ui/button/index.js";
 	import { Input } from "$lib/components/ui/input/index.js";
     
-    let { form }: { form?: { success: boolean } | null } = $props();
+    let { form, linkError }: { form?: { success?: boolean, error?: string } | null, linkError?: string | null } = $props();
     let id = $props.id()
 	
 	let password: string = $state("");
@@ -25,6 +25,9 @@
     {#if form?.success}
         <p> Password changed successfully, please login using your new password</p>
         <a href="/login">Login</a>
+    {:else if linkError}
+        <p>This password reset link is invalid or has expired.</p>
+        <a href="/request-password-reset">Request a new link</a>
     {:else}
 		<form method="POST" action="?/resetPassword">
 			<Field.Field>

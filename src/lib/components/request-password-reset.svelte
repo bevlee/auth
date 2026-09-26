@@ -22,7 +22,7 @@
         <p> If an account exists with that email, we have sent a reset link</p>
         <a href="/login">Go back</a>
     {:else}
-		<form method="POST" action="?/resetPassword">
+		<form method="POST" action="?/requestResetPassword">
 			<FieldGroup>
 				<Field>
 					<FieldLabel for="email-{id}">Email</FieldLabel>

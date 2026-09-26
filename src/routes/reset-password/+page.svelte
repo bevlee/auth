@@ -1,8 +1,8 @@
 <script>
-    import ResetPassword from "$lib/components/request-password-reset.svelte";
+    import ForgotPassword from "$lib/components/forgot-password.svelte"
 
-    let { form } = $props();
+    let { data, form } = $props();
 </script>
 
 
-<ResetPassword {form} />
+<ForgotPassword {form} linkError={data.error} />
