@@ -29,6 +29,18 @@ export const auth = betterAuth({
       console.log(`Password for user ${user.email} has been reset`)
     }
   }, 
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      void resend.emails.send({
+        from: env.AUTH_EMAIL,
+        to: user.email,
+        subject: 'Verify your email address',
+        html: `Click <a href="${url}">here</a> to verify your email.`,
+      });
+    },
+  },
   socialProviders: { google: { 
             clientId: env.GOOGLE_CLIENT_ID as string, 
             clientSecret: env.GOOGLE_CLIENT_SECRET as string, 
@@ -40,5 +52,11 @@ export const auth = betterAuth({
       enabled: !!env.COOKIE_DOMAIN,
       domain: env.COOKIE_DOMAIN
     }
-  }
+  },
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google"], // add other providers as we go. Technically i should reuqire email confirmation otherwise you can hijack someone elses email by making an account firsty
+    },
+  },
 })
