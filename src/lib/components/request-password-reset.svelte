@@ -20,7 +20,7 @@
 	<Card.Content>
     {#if form?.success}
         <p> If an account exists with that email, we have sent a reset link</p>
-        <a href="/login">Go back</a>
+        <a class="text-primary underline underline-offset-4 hover:text-primary/80" href="/login">Go back</a>
     {:else}
 		<form method="POST" action="?/requestResetPassword">
 			<FieldGroup>

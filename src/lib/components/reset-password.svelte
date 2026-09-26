@@ -3,8 +3,8 @@
 	import * as Field from "$lib/components/ui/field/index.js";
 	import { Button } from "$lib/components/ui/button/index.js";
 	import { Input } from "$lib/components/ui/input/index.js";
-    
-    let { form, linkError }: { form?: { success?: boolean, error?: string } | null, linkError?: string | null } = $props();
+    import { page } from '$app/state';
+    let { form }: { form?: { success?: boolean, error?: string } | null } = $props();
     let id = $props.id()
 	
 	let password: string = $state("");
@@ -14,6 +14,11 @@
 	let passwordsMatch = $derived(password.length >= 8 && confirmPassword.length >= 8 && password === confirmPassword)
 	let hasError = $derived(!passwordsMatch || !validPassword)
 
+	const error = page.url.searchParams.get("error")
+	const token = page.url.searchParams.get("token")
+
+	let pageError = $derived(error || !token)
+
 </script>
 
 <Card.Root class="mx-auto w-full max-w-sm">
@@ -22,14 +27,13 @@
 		<Card.Description>Please set your new password</Card.Description>
 	</Card.Header>
 	<Card.Content>
-    {#if form?.success}
+	{#if pageError}
+		<p>Invalid Password Reset request. <br/><br/>Please try the password reset request again: <a class="text-primary underline underline-offset-4 hover:text-primary/80" href="/request-password-reset">password reset</a></p>
+    {:else if form?.success}
         <p> Password changed successfully, please login using your new password</p>
-        <a href="/login">Login</a>
-    {:else if linkError}
-        <p>This password reset link is invalid or has expired.</p>
-        <a href="/request-password-reset">Request a new link</a>
+        <a class="text-primary underline underline-offset-4 hover:text-primary/80" href="/login">Login</a>
     {:else}
-		<form method="POST" action="?/resetPassword">
+		<form method="POST" action="?/resetPassword&token={token}">
 			<Field.Field>
 					<Field.Label for="password">Password</Field.Label>
 					<Input id="password" bind:value={password} name="password" type="password" required
