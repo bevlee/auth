@@ -1,6 +1,7 @@
 
 import { auth } from "$lib/server/auth"
 import { fail } from "@sveltejs/kit"
+import { isAPIError } from 'better-auth/api';
 
 export const load = async ({ url }) => {
     return {
@@ -19,13 +20,20 @@ export const actions = {
         }
         const password = formData.get('password') as string;
 
-        await auth.api.resetPassword({
-            body : {    
-                newPassword: password,
-                token: token
+        try {
+            const response = await auth.api.resetPassword({
+                body : {    
+                    newPassword: password,
+                    token: token
+                }
+            })
+            return { success: true}
+        } catch(error) {
+            if (isAPIError(error)) {
+                return fail(400, {error: error.message})
             }
-        })
+        }
 
-        return { success: true}
+        return fail(500, {error: 'Something went wrong, please try a new password reset request'})
     }
 }
