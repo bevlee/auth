@@ -19,6 +19,19 @@
 	let passwordsMatch = $derived(password.length >= 8 && confirmPassword.length >= 8 && password === confirmPassword)
 	let hasError = $derived(!passwordsMatch || !validName || !validEmail || !validPassword)
 
+
+ 	import { page } from '$app/state';
+	const callbackURL = page.url.searchParams.get("callbackURL")
+	const signUp = async (e: SubmitEvent) => {
+		e.preventDefault()
+
+		await authClient.signUp.email({
+			name: name,
+			email: email,
+			password: password,
+			callbackURL: callbackURL ?? undefined
+		})
+	}
 	$effect(() => {
 		console.log("hasError", hasError, {
 			validName,
@@ -35,7 +48,7 @@
 		<Card.Description>Enter your information below to create your account</Card.Description>
 	</Card.Header>
 	<Card.Content>
-		<form method="POST" action="?/signup">
+		<form method="POST" onsubmit={signUp}>
 			<Field.Group>
 				<Field.Field>
 					<Field.Label for="name">Name</Field.Label>
