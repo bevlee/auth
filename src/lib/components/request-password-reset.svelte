@@ -10,7 +10,6 @@
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { authClient } from "$lib/client";
 
-	let { form }: { form?: { success: boolean } | null } = $props();
 	let id = $props.id();
 	let email: string = $state("");
 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -53,6 +52,12 @@
 				class="text-primary underline underline-offset-4 hover:text-primary/80"
 				href="/login">Go back</a
 			>
+		{:else if requestOutcome === "error"}
+			<p>
+				Error: {errorMessage}
+				<br />
+				Please try requesting another password reset
+			</p>
 		{:else if requestOutcome === ""}
 			<form onsubmit={requestPasswordReset}>
 				<FieldGroup>
