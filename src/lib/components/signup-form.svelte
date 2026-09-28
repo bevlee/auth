@@ -27,7 +27,15 @@
 	);
 
 	import { page } from "$app/state";
-	const callbackURL = page.url.searchParams.get("callbackURL");
+	let callbackURL = page.url.searchParams.get("callbackURL");
+
+	if (!callbackURL) {
+		if (sessionStorage.getItem("redirect_to")) {
+			callbackURL = sessionStorage.getItem("redirect_to");
+		}
+	} else {
+		sessionStorage.setItem("redirect_to", callbackURL);
+	}
 	const signUp = async (e: SubmitEvent) => {
 		e.preventDefault();
 
@@ -35,8 +43,11 @@
 			name: name,
 			email: email,
 			password: password,
+
 			callbackURL: callbackURL ?? undefined,
 		});
+		sessionStorage.removeItem("redirect_to");
+
 		if (error) {
 			toast(error?.message ?? "an error occurred, please try again");
 		}

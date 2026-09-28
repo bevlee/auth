@@ -20,7 +20,16 @@
 	let validEmail = $derived(emailRegex.test(email));
 	let validPassword = $derived(password.length >= 8);
 
-	const callbackURL = page.url.searchParams.get("callbackURL");
+	let callbackURL = page.url.searchParams.get("callbackURL");
+
+	if (!callbackURL) {
+		if (sessionStorage.getItem("redirect_to")) {
+			callbackURL = sessionStorage.getItem("redirect_to");
+		}
+	} else {
+		sessionStorage.setItem("redirect_to", callbackURL);
+	}
+
 	const login = async (e: SubmitEvent) => {
 		e.preventDefault();
 		await authClient.signIn.email({
@@ -28,6 +37,7 @@
 			password: password,
 			callbackURL: callbackURL ?? undefined,
 		});
+		sessionStorage.removeItem("redirect_to");
 	};
 </script>
 
