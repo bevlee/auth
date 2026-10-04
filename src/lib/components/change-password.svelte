@@ -43,14 +43,16 @@
             revokeOtherSessions: false,
         });
         if (data) {
-            toast("password changed successfully!");
+            toast.success("password changed successfully!");
             currentPassword = "";
             newPassword = "";
             confirmPassword = "";
         }
 
         if (error) {
-            toast(error?.message ?? "an error occurred, please try again");
+            toast.error(
+                error?.message ?? "an error occurred, please try again",
+            );
         }
     };
 </script>
