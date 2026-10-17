@@ -1,21 +1,50 @@
 import { betterAuth } from "better-auth";
-import Database from "better-sqlite3";
-import { env } from "$env/dynamic/private"
-import { Resend } from 'resend';
+import { getRequestEvent } from "$app/server";
+import { Pool } from "pg";
+import { env } from "$env/dynamic/private";
+import { Resend } from "resend";
+import { sveltekitCookies } from "better-auth/svelte-kit";
 
 const resend = new Resend(env.RESEND_KEY);
 
-import { getRequestEvent } from "$app/server";
-import { sveltekitCookies } from "better-auth/svelte-kit";
+type AuthEmailPurpose = "password_reset" | "email_verification";
+type AuthEmailOptions = Parameters<typeof resend.emails.send>[0];
+
+function sendAuthEmail(purpose: AuthEmailPurpose, email: AuthEmailOptions): void {
+  void Promise.resolve()
+    .then(() => resend.emails.send(email))
+    .then(({ error }) => {
+      if (error) {
+        console.error({
+          event: "auth_email_send_failed",
+          purpose,
+          failure: "provider_error",
+        });
+      }
+    })
+    .catch(() => {
+      console.error({
+        event: "auth_email_send_failed",
+        purpose,
+        failure: "request_rejected",
+      });
+    });
+}
 
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
-  database: new Database("./sqlite.db"), 
+  database: new Pool({
+    host: env.PGHOST,
+    port: Number(env.PGPORT ?? 5432),
+    database: env.PGDATABASE,
+    user: env.PGUSER,
+    password: env.PGPASSWORD,
+  }),
   emailAndPassword: { 
     enabled: true,
     sendResetPassword: async ({user, url, token}) => {
-      void resend.emails.send({
+      sendAuthEmail("password_reset", {
         from: env.AUTH_EMAIL,
         to: user.email,
         subject: "Reset your password",
@@ -26,14 +55,14 @@ export const auth = betterAuth({
       });
     },
     onPasswordReset: async ({ user}, request) => {
-      console.log(`Password for user ${user.email} has been reset`)
+      console.info({ event: "auth_password_reset_completed", userId: user.id });
     }
   }, 
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      void resend.emails.send({
+      sendAuthEmail("email_verification", {
         from: env.AUTH_EMAIL,
         to: user.email,
         subject: 'Verify your email address',
