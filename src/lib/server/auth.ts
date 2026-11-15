@@ -1,4 +1,6 @@
 import { betterAuth } from "better-auth";
+import { passwordOptions } from "./password";
+import { trustedOrigins } from "./auth-cors";
 import { getRequestEvent } from "$app/server";
 import { Pool } from "pg";
 import { env } from "$env/dynamic/private";
@@ -43,6 +45,7 @@ export const auth = betterAuth({
   }),
   emailAndPassword: { 
     enabled: true,
+    password: passwordOptions,
     sendResetPassword: async ({user, url, token}) => {
       sendAuthEmail("password_reset", {
         from: env.AUTH_EMAIL,
@@ -88,5 +91,5 @@ export const auth = betterAuth({
       trustedProviders: ["google"], // add other providers as we go. Technically i should reuqire email confirmation otherwise you can hijack someone elses email by making an account firsty
     },
   },
-  trustedOrigins: ["https://*.bevsoft.com", "http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
+  trustedOrigins,
 })

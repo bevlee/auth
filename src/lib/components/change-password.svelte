@@ -13,7 +13,7 @@
     let newPassword: string = $state("");
     let confirmPassword: string = $state("");
 
-    let validCurrentPassword = $derived(newPassword.length >= 8);
+    let validCurrentPassword = $derived(currentPassword.length > 0);
     let validNewPassword = $derived(newPassword.length >= 8);
     let passwordsMatch = $derived(
         newPassword.length >= 8 &&
@@ -24,16 +24,6 @@
         !passwordsMatch || !validNewPassword || !validCurrentPassword,
     );
 
-    import { page } from "$app/state";
-    let callbackURL = page.url.searchParams.get("callbackURL");
-
-    if (!callbackURL) {
-        if (sessionStorage.getItem("redirect_to")) {
-            callbackURL = sessionStorage.getItem("redirect_to");
-        }
-    } else {
-        sessionStorage.setItem("redirect_to", callbackURL);
-    }
     const changePassword = async (e: SubmitEvent) => {
         e.preventDefault();
 
@@ -68,9 +58,9 @@
         <form onsubmit={changePassword}>
             <Field.Group>
                 <Field.Field>
-                    <Field.Label for="password">Current Password</Field.Label>
+                    <Field.Label for="current-password">Current Password</Field.Label>
                     <Input
-                        id="password"
+                        id="current-password"
                         bind:value={currentPassword}
                         name="password"
                         type="password"
@@ -82,12 +72,12 @@
                         class={validCurrentPassword
                             ? "text-green-600 dark:text-green-500"
                             : undefined}
-                    ></Field.Description>
+                    >Enter your current password.</Field.Description>
                 </Field.Field>
                 <Field.Field>
-                    <Field.Label for="password">New Password</Field.Label>
+                    <Field.Label for="new-password">New Password</Field.Label>
                     <Input
-                        id="password"
+                        id="new-password"
                         bind:value={newPassword}
                         name="password"
                         type="password"

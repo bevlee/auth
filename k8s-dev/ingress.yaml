@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth-ingress
+  namespace: auth-dev
+  labels:
+    app: auth
+  annotations:
+    # <namespace>-<name>@kubernetescrd, see middleware.yaml.
+    traefik.ingress.kubernetes.io/router.middlewares: auth-dev-compress@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - auth-dev.bevsoft.com
+      secretName: auth-dev-tls
+  rules:
+    # HMR websockets share this host and port, which Traefik proxies as-is.
+    - host: auth-dev.bevsoft.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: auth
+                port:
+                  number: 80

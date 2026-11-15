@@ -9,6 +9,7 @@
 	} from "$lib/components/ui/field/index.js";
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { authClient } from "$lib/client";
+	import { toast } from "svelte-sonner";
 
 	import { page } from "$app/state";
 	const id = $props.id();
@@ -18,7 +19,7 @@
 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 	let validEmail = $derived(emailRegex.test(email));
-	let validPassword = $derived(password.length >= 8);
+	let validPassword = $derived(password.length > 0);
 
 	let callbackURL = page.url.searchParams.get("callbackURL");
 
@@ -32,11 +33,15 @@
 
 	const login = async (e: SubmitEvent) => {
 		e.preventDefault();
-		await authClient.signIn.email({
+		const { error } = await authClient.signIn.email({
 			email: email,
 			password: password,
 			callbackURL: callbackURL ?? undefined,
 		});
+		if (error) {
+			toast.error(error.message ?? "Unable to sign in. Please try again.");
+			return;
+		}
 		sessionStorage.removeItem("redirect_to");
 	};
 </script>
@@ -93,6 +98,7 @@
 						onclick={async () => {
 							await authClient.signIn.social({
 								provider: "google",
+								callbackURL: callbackURL ?? undefined,
 							});
 						}}
 					>

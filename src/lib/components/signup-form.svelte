@@ -39,27 +39,20 @@
 	const signUp = async (e: SubmitEvent) => {
 		e.preventDefault();
 
-		const { data, error } = await authClient.signUp.email({
+		const { error } = await authClient.signUp.email({
 			name: name,
 			email: email,
 			password: password,
 
 			callbackURL: callbackURL ?? undefined,
 		});
-		sessionStorage.removeItem("redirect_to");
-
 		if (error) {
 			toast(error?.message ?? "an error occurred, please try again");
+			return;
 		}
+		sessionStorage.removeItem("redirect_to");
+		toast.success("Account created. Check your email to verify it.");
 	};
-	$effect(() => {
-		console.log("hasError", hasError, {
-			validName,
-			validEmail,
-			validPassword,
-			passwordsMatch,
-		});
-	});
 </script>
 
 <Card.Root {...restProps}>
@@ -165,6 +158,7 @@
 							onclick={async () => {
 								await authClient.signIn.social({
 									provider: "google",
+									callbackURL: callbackURL ?? undefined,
 								});
 							}}
 						>
