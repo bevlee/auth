@@ -9,30 +9,44 @@
 	import { Button } from "$lib/components/ui/button/index.js";
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { authClient } from "$lib/client";
+	import { page } from "$app/state";
+	import { resolveDestination, withDestination } from "$lib/destination";
 
 	let id = $props.id();
-	let email: string = $state("");
+	const destination = resolveDestination(page.url);
+	let email: string = $state(page.url.searchParams.get("email") ?? "");
 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 	let validEmail = $derived(emailRegex.test(email));
 
-	let requestOutcome = $state("");
+	let pending = $state(false);
+	let sent = $state(false);
 	let errorMessage = $state("");
+	let resendState: "idle" | "sending" | "sent" | "error" = $state("idle");
+
+	const send = () =>
+		authClient.requestPasswordReset({
+			email,
+			redirectTo: withDestination("/reset-password", destination),
+		});
 
 	const requestPasswordReset = async (e: SubmitEvent) => {
 		e.preventDefault();
-
-		const { data, error } = await authClient.requestPasswordReset({
-			email: email,
-			redirectTo: "/reset-password",
-		});
-
+		if (pending) return;
+		pending = true;
+		errorMessage = "";
+		const { error } = await send();
+		pending = false;
 		if (error) {
-			requestOutcome = "error";
-			errorMessage = error.message ?? "";
+			errorMessage = `We couldn't send the reset email${error.message ? ` (${error.message})` : ""}. Please try again.`;
+			return;
 		}
-		if (data?.status) {
-			requestOutcome = "success";
-		}
+		sent = true;
+	};
+
+	const resend = async () => {
+		resendState = "sending";
+		const { error } = await send();
+		resendState = error ? "error" : "sent";
 	};
 </script>
 
@@ -44,21 +58,28 @@
 		>
 	</Card.Header>
 	<Card.Content>
-		{#if requestOutcome === "success"}
-			<p>
-				If an account exists with that email, we have sent a reset link
-			</p>
-			<a
-				class="text-primary underline underline-offset-4 hover:text-primary/80"
-				href="/login">Go back</a
-			>
-		{:else if requestOutcome === "error"}
-			<p>
-				Error: {errorMessage}
-				<br />
-				Please try requesting another password reset
-			</p>
-		{:else if requestOutcome === ""}
+		{#if sent}
+			<div class="flex flex-col gap-4">
+				<p>If an account exists with that email, we have sent a reset link</p>
+				<Button
+					variant="outline"
+					disabled={resendState === "sending"}
+					onclick={resend}
+					>{resendState === "sending" ? "Sending…" : "Send again"}</Button
+				>
+				{#if resendState === "sent"}
+					<p role="status" class="text-sm">We've sent another link.</p>
+				{:else if resendState === "error"}
+					<p role="alert" class="text-sm text-destructive">
+						We couldn't send another link. Please wait a moment and try again.
+					</p>
+				{/if}
+				<a
+					class="text-primary underline underline-offset-4 hover:text-primary/80"
+					href={withDestination("/login", destination)}>Back to sign in</a
+				>
+			</div>
+		{:else}
 			<form onsubmit={requestPasswordReset}>
 				<FieldGroup>
 					<Field>
@@ -72,19 +93,25 @@
 							required
 						/>
 					</Field>
+					{#if errorMessage}
+						<p role="alert" class="text-sm text-destructive">{errorMessage}</p>
+					{/if}
 					<Field>
 						<Button
 							type="submit"
 							class="w-full"
-							disabled={!validEmail}
-							>Send password reset email</Button
+							disabled={pending || !validEmail}
+							>{pending ? "Sending…" : "Send password reset email"}</Button
 						>
 
 						<FieldDescription class="text-center">
-							Don't have an account? <a href="/signup">Sign up</a>
+							Don't have an account? <a href={withDestination("/signup", destination)}
+								>Sign up</a
+							>
 						</FieldDescription>
 						<FieldDescription class="text-center">
-							Sign in to your account? <a href="/login">Sign in</a
+							Sign in to your account? <a href={withDestination("/login", destination)}
+								>Sign in</a
 							>
 						</FieldDescription>
 					</Field>

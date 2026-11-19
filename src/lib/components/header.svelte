@@ -2,10 +2,15 @@
     import { authClient } from "$lib/client";
     import Button from "./ui/button/button.svelte";
     import { goto } from "$app/navigation";
+    import { toast } from "svelte-sonner";
     const { session } = $props();
 
     const signOut = async () => {
-        await authClient.signOut();
+        const { error } = await authClient.signOut();
+        if (error) {
+            toast.error("We couldn't sign you out. Please try again.");
+            return;
+        }
         await goto("/");
     };
 </script>

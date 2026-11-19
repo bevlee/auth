@@ -3,6 +3,15 @@ import { expect, test, type Page } from '@playwright/test';
 const callbackURL = '/account?source=profile%20tests&tab=security#password';
 const email = 'profile-test@example.invalid';
 const password = 'TemporaryPassword123!';
+const withDestination = (path: string, to: string) => `${path}?callbackURL=${encodeURIComponent(to)}`;
+/** Signup sends verification links via /verify-email, which forwards to the destination. */
+const sentCallback = (kind: 'login' | 'signup', to: string) =>
+	kind === 'signup' ? withDestination('/verify-email', to) : to;
+let signedIn = false;
+const sessionBody = () => ({
+	session: { id: 's', userId: 'test-user', token: 't', expiresAt: new Date(Date.now() + 86_400_000).toISOString() },
+	user: { id: 'test-user', name: 'Profile Tester', email, emailVerified: true }
+});
 
 type AuthScenario =
 	| { kind: 'login'; path: '/login'; endpoint: '/sign-in/email'; submit: 'Login' }
@@ -14,9 +23,10 @@ const authScenarios: AuthScenario[] = [
 ];
 
 test.beforeEach(async ({ page }) => {
+	signedIn = false;
 	await page.route('**/api/auth/**', async (route) => {
 		if (new URL(route.request().url()).pathname === '/api/auth/get-session') {
-			await route.fulfill({ json: null });
+			await route.fulfill({ json: signedIn ? sessionBody() : null });
 			return;
 		}
 		throw new Error(`Unexpected auth request: ${route.request().method()} ${route.request().url()}`);
@@ -39,7 +49,7 @@ test('login submits an existing short password unchanged', async ({ page }) => {
 	}));
 	const request = page.waitForRequest('**/api/auth/sign-in/email');
 	await page.getByRole('button', { name: 'Login', exact: true }).click();
-	expect((await request).postDataJSON()).toEqual({ email, password: 'short' });
+	expect((await request).postDataJSON()).toEqual({ email, password: 'short', callbackURL: '/account' });
 	await expect(page.getByText('Test credentials rejected', { exact: true })).toBeVisible();
 });
 
@@ -69,7 +79,7 @@ for (const scenario of authScenarios) {
 		await expect(submit).toBeEnabled();
 	});
 
-	test(`${scenario.kind} sends no callback when this browser context has none`, async ({ page }) => {
+	test(`${scenario.kind} sends the Account default when this browser context has no callback`, async ({ page }) => {
 		await page.goto(scenario.path);
 		await fillAuthForm(page, scenario);
 		await page.route(`**/api/auth${scenario.endpoint}`, async (route) => {
@@ -78,7 +88,8 @@ for (const scenario of authScenarios) {
 		const request = page.waitForRequest(`**/api/auth${scenario.endpoint}`);
 		await page.getByRole('button', { name: scenario.submit, exact: true }).click();
 		expect((await request).postDataJSON()).toEqual({
-			...(scenario.kind === 'signup' ? { name: 'Profile Tester' } : {}), email, password
+			...(scenario.kind === 'signup' ? { name: 'Profile Tester' } : {}), email, password,
+			callbackURL: sentCallback(scenario.kind, '/account')
 		});
 		await expect(page.getByText('Test account rejected', { exact: true })).toBeVisible();
 		await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBeNull();
@@ -95,6 +106,7 @@ for (const scenario of authScenarios) {
 		let attempt = 0;
 		await page.route(`**/api/auth${scenario.endpoint}`, async (route) => {
 			attempt++;
+			if (attempt === 2) signedIn = true;
 			if (attempt === 1) {
 				await route.fulfill({ status: 400, json: { code: 'TEST_AUTH_ERROR', message: errorMessage } });
 			} else {
@@ -108,7 +120,7 @@ for (const scenario of authScenarios) {
 		const submit = page.getByRole('button', { name: scenario.submit, exact: true });
 		const expectedPayload = {
 			...(scenario.kind === 'signup' ? { name: 'Profile Tester' } : {}),
-			email, password, callbackURL
+			email, password, callbackURL: sentCallback(scenario.kind, callbackURL)
 		};
 		for (const outcome of ['error', 'success']) {
 			const request = page.waitForRequest(`**/api/auth${scenario.endpoint}`);
@@ -122,7 +134,7 @@ for (const scenario of authScenarios) {
 					await expect(page).toHaveURL('http://127.0.0.1:4179' + callbackURL);
 					await expect(page.getByRole('link', { name: 'Change Password', exact: true })).toBeVisible();
 				} else {
-					await expect(page.getByText('Account created. Check your email to verify it.', { exact: true })).toBeVisible();
+					await expect(page).toHaveURL('http://127.0.0.1:4179' + callbackURL);
 				}
 				await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBeNull();
 			}
@@ -133,11 +145,11 @@ for (const scenario of authScenarios) {
 test('callback survives navigation between login, signup, and forgot password', async ({ page }) => {
 	await page.goto(`/login?callbackURL=${encodeURIComponent(callbackURL)}`);
 	await page.getByRole('link', { name: 'Sign up', exact: true }).click();
-	await expect(page).toHaveURL(/\/signup$/);
+	await expect(page).toHaveURL(/\/signup\?/);
 	await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBe(callbackURL);
 	await page.getByRole('link', { name: 'Sign in', exact: true }).click();
 	await page.getByRole('link', { name: 'Forgot your password?', exact: true }).click();
-	await expect(page).toHaveURL(/\/request-password-reset$/);
+	await expect(page).toHaveURL(/\/request-password-reset\?/);
 	await page.reload();
 	await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBe(callbackURL);
 	await page.getByRole('link', { name: 'Sign up', exact: true }).click();
@@ -166,11 +178,12 @@ for (const outcome of ['success', 'error']) {
 		});
 		const request = page.waitForRequest('**/api/auth/request-password-reset');
 		await submit.click();
-		expect((await request).postDataJSON()).toEqual({ email, redirectTo: '/reset-password' });
+		expect((await request).postDataJSON()).toEqual({ email, redirectTo: withDestination('/reset-password', callbackURL) });
 		await expect(page.getByText(outcome === 'success'
 			? 'If an account exists with that email, we have sent a reset link'
-			: /Error: Too many requests/)).toBeVisible();
-		await expect(submit).toHaveCount(0);
+			: /couldn't send the reset email \(Too many requests\)/)).toBeVisible();
+		if (outcome === 'success') await expect(submit).toHaveCount(0);
+		else await expect(submit).toBeEnabled();
 		await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBe(callbackURL);
 	});
 }
@@ -179,7 +192,7 @@ for (const url of ['/reset-password', '/reset-password?token=test-token&error=IN
 	test(`reset password rejects an invalid link ${url}`, async ({ page }) => {
 		await page.goto(url);
 		await expect(page.getByText(/Invalid Password Reset request/)).toBeVisible();
-		await expect(page.getByRole('link', { name: 'password reset', exact: true })).toHaveAttribute('href', '/request-password-reset');
+		await expect(page.getByRole('link', { name: 'Send a new reset link', exact: true })).toHaveAttribute('href', /^\/request-password-reset\?/);
 		await expect(page.getByRole('button', { name: 'Change password', exact: true })).toHaveCount(0);
 	});
 }
@@ -201,14 +214,13 @@ for (const outcome of ['success', 'error']) {
 		const request = page.waitForRequest('**/api/auth/reset-password');
 		await submit.click();
 		expect((await request).postDataJSON()).toEqual({ newPassword: 'NewPassword123!', token: 'reset-test-token' });
-		await expect(page.getByText(outcome === 'success'
-			? 'Password changed successfully, please login using your new password'
-			: 'Error resetting password, please try again', { exact: true })).toBeVisible();
+		await expect(outcome === 'success'
+			? page.getByRole('heading', { name: 'Password updated' })
+			: page.getByText('Invalid token', { exact: true })).toBeVisible();
 		if (outcome === 'success') {
 			await expect(submit).toHaveCount(0);
-			await page.getByText('Password changed successfully, please login using your new password', { exact: true })
-				.locator('..').getByRole('link', { name: 'Login', exact: true }).click();
-			await expect(page).toHaveURL(/\/login$/);
+			await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+			await expect(page).toHaveURL(/\/login\?.*reset=success/);
 			await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeVisible();
 		} else {
 			await expect(submit).toBeEnabled();
@@ -218,6 +230,7 @@ for (const outcome of ['success', 'error']) {
 
 for (const outcome of ['success', 'error']) {
 	test(`change password validates the form and displays the ${outcome} outcome`, async ({ page }) => {
+		signedIn = true;
 		await page.goto('/change-password');
 		const current = page.getByLabel('Current Password', { exact: true });
 		const next = page.getByLabel('New Password', { exact: true });

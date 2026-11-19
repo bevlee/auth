@@ -88,7 +88,11 @@ export const auth = betterAuth({
   account: {
     accountLinking: {
       enabled: true,
-      trustedProviders: ["google"], // add other providers as we go. Technically i should reuqire email confirmation otherwise you can hijack someone elses email by making an account firsty
+      trustedProviders: ["google"], // add other providers as we go
+      // Better Auth's default, stated explicitly: never link a provider to an
+      // account whose email is unverified, so nobody can pre-register someone
+      // else's email and inherit their Google sign-in.
+      requireLocalEmailVerified: true,
     },
   },
   trustedOrigins,

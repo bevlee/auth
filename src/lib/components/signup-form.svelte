@@ -5,7 +5,13 @@
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { authClient } from "$lib/client";
 	import type { ComponentProps } from "svelte";
-	import { toast } from "svelte-sonner";
+	import { page } from "$app/state";
+	import {
+		clearDestination,
+		resolveDestination,
+		verificationCallback,
+		withDestination,
+	} from "$lib/destination";
 
 	let { ...restProps }: ComponentProps<typeof Card.Root> = $props();
 
@@ -22,36 +28,50 @@
 			confirmPassword.length >= 8 &&
 			password === confirmPassword,
 	);
+	let showMismatch = $derived(
+		confirmPassword.length > 0 && password !== confirmPassword,
+	);
 	let hasError = $derived(
 		!passwordsMatch || !validName || !validEmail || !validPassword,
 	);
 
-	import { page } from "$app/state";
-	let callbackURL = page.url.searchParams.get("callbackURL");
+	const destination = resolveDestination(page.url);
 
-	if (!callbackURL) {
-		if (sessionStorage.getItem("redirect_to")) {
-			callbackURL = sessionStorage.getItem("redirect_to");
-		}
-	} else {
-		sessionStorage.setItem("redirect_to", callbackURL);
-	}
+	let pending = $state(false);
+	let errorMessage = $state("");
+
 	const signUp = async (e: SubmitEvent) => {
 		e.preventDefault();
-
+		if (pending) return;
+		pending = true;
+		errorMessage = "";
 		const { error } = await authClient.signUp.email({
-			name: name,
-			email: email,
-			password: password,
-
-			callbackURL: callbackURL ?? undefined,
+			name,
+			email,
+			password,
+			callbackURL: verificationCallback(destination),
 		});
 		if (error) {
-			toast(error?.message ?? "an error occurred, please try again");
+			pending = false;
+			errorMessage = error.message ?? "An error occurred, please try again.";
 			return;
 		}
-		sessionStorage.removeItem("redirect_to");
-		toast.success("Account created. Check your email to verify it.");
+		// Signed in straight away; the verification email (whose link goes via
+		// /verify-email) is optional. Keep the button disabled while leaving.
+		clearDestination();
+		window.location.href = destination;
+	};
+
+	const signUpWithGoogle = async () => {
+		errorMessage = "";
+		const { error } = await authClient.signIn.social({
+			provider: "google",
+			callbackURL: destination,
+			errorCallbackURL: withDestination("/login", destination),
+		});
+		if (error) {
+			errorMessage = "We couldn't start Google sign-in. Please try again.";
+		}
 	};
 </script>
 
@@ -88,8 +108,8 @@
 						required
 					/>
 					<Field.Description>
-						We'll use this to contact you. We will not share your
-						email with anyone else.
+						We'll use this to contact you. We will not share your email
+						with anyone else.
 					</Field.Description>
 					<Field.Error
 						errors={email.length > 0 && !validEmail
@@ -105,11 +125,7 @@
 						name="password"
 						type="password"
 						required
-						aria-invalid={(confirmPassword.length > 0 &&
-							password.length === 0) ||
-							(confirmPassword.length > 0 &&
-								password.length > 0 &&
-								!passwordsMatch)}
+						aria-invalid={showMismatch}
 					/>
 					<Field.Description
 						class={validPassword
@@ -121,51 +137,41 @@
 							: ""}
 					</Field.Description>
 				</Field.Field>
-				<Field.Field>
-					<Field.Label for="confirm-password"
-						>Confirm Password</Field.Label
-					>
+				<Field.Field data-invalid={showMismatch}>
+					<Field.Label for="confirm-password">Confirm Password</Field.Label>
 					<Input
 						id="confirm-password"
 						bind:value={confirmPassword}
 						name="confirm-password"
 						type="password"
 						required
-						aria-invalid={(confirmPassword.length > 0 &&
-							password.length === 0) ||
-							(confirmPassword.length > 0 &&
-								password.length > 0 &&
-								!passwordsMatch)}
+						aria-invalid={showMismatch}
 					/>
 					<Field.Description
 						class={passwordsMatch
 							? "text-green-600 dark:text-green-500"
 							: undefined}
 					>
-						Please confirm your password. {passwordsMatch
-							? "correct"
-							: ""}
+						Please confirm your password. {passwordsMatch ? "correct" : ""}
 					</Field.Description>
+					<Field.Error
+						errors={showMismatch ? [{ message: "Passwords don't match." }] : []}
+					/>
 				</Field.Field>
+				{#if errorMessage}
+					<p role="alert" class="text-sm text-destructive">{errorMessage}</p>
+				{/if}
 				<Field.Group>
 					<Field.Field>
-						<Button type="submit" disabled={hasError}
-							>Create Account</Button
+						<Button type="submit" disabled={pending || hasError}
+							>{pending ? "Creating account…" : "Create Account"}</Button
 						>
-						<Button
-							variant="outline"
-							type="button"
-							onclick={async () => {
-								await authClient.signIn.social({
-									provider: "google",
-									callbackURL: callbackURL ?? undefined,
-								});
-							}}
-						>
+						<Button variant="outline" type="button" onclick={signUpWithGoogle}>
 							Sign up with Google
 						</Button>
 						<Field.Description class="px-6 text-center">
-							Already have an account? <a href="/login">Sign in</a
+							Already have an account? <a href={withDestination("/login", destination)}
+								>Sign in</a
 							>
 						</Field.Description>
 					</Field.Field>

@@ -24,14 +24,19 @@
         !passwordsMatch || !validNewPassword || !validCurrentPassword,
     );
 
+    let pending = $state(false);
+
     const changePassword = async (e: SubmitEvent) => {
         e.preventDefault();
+        if (pending) return;
+        pending = true;
 
         const { data, error } = await authClient.changePassword({
             currentPassword: currentPassword,
             newPassword: newPassword,
             revokeOtherSessions: false,
         });
+        pending = false;
         if (data) {
             toast.success("password changed successfully!");
             currentPassword = "";
@@ -126,8 +131,8 @@
                 </Field.Field>
                 <Field.Group>
                     <Field.Field>
-                        <Button type="submit" disabled={hasError}
-                            >Change Password</Button
+                        <Button type="submit" disabled={pending || hasError}
+                            >{pending ? "Changing password…" : "Change Password"}</Button
                         >
                     </Field.Field>
                 </Field.Group>
