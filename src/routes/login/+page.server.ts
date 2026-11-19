@@ -18,7 +18,6 @@ export const actions = {
                 headers: request.headers,
             })
         } catch (error) {
-            console.log("errors somewhere", error)
             return fail(400, { email, error: true })
         }
     }

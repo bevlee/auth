@@ -29,9 +29,7 @@ export const actions = {
                 body: { name, email, password },
                 headers: request.headers,
             })
-            console.log(data)
         } catch (error) {
-            console.log("errors somewhere", error)
             return fail(400, { email, name, error: true })
         }
     }

@@ -13,4 +13,4 @@
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 <Header {session} />
 {@render children()}
-<Toaster />
+<Toaster richColors />

@@ -5,11 +5,7 @@
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { page } from "$app/state";
 	import { authClient } from "$lib/client";
-	import { toast } from "svelte-sonner";
-
-	let { form }: { form?: { success?: boolean; error?: string } | null } =
-		$props();
-	let id = $props.id();
+	import { resolveDestination, withDestination } from "$lib/destination";
 
 	let password: string = $state("");
 	let confirmPassword: string = $state("");
@@ -20,57 +16,78 @@
 			confirmPassword.length >= 8 &&
 			password === confirmPassword,
 	);
+	let showMismatch = $derived(
+		confirmPassword.length > 0 && password !== confirmPassword,
+	);
 	let hasError = $derived(!passwordsMatch || !validPassword);
 
-	const error = page.url.searchParams.get("error");
+	const destination = resolveDestination(page.url);
 	const token = page.url.searchParams.get("token") ?? "";
 
-	let pageError = $derived(error || !token);
-
-	let requestOutcome = $state("");
+	// The link is unusable if Better Auth flagged it, it has no token, or the
+	// server rejects the token on submit (expired or already used).
+	let linkInvalid = $state(!!page.url.searchParams.get("error") || !token);
+	let pending = $state(false);
+	let updated = $state(false);
+	let errorMessage = $state("");
 
 	const resetPassword = async (e: SubmitEvent) => {
 		e.preventDefault();
-
-		const { data, error } = await authClient.resetPassword({
+		if (pending) return;
+		pending = true;
+		errorMessage = "";
+		const { error } = await authClient.resetPassword({
 			newPassword: password,
-			token: token,
+			token,
 		});
-
+		pending = false;
 		if (error) {
-			toast("Error resetting password, please try again");
+			if (error.code === "INVALID_TOKEN") {
+				linkInvalid = true;
+			} else {
+				errorMessage =
+					error.message ?? "Something went wrong. Please try again.";
+			}
+			return;
 		}
-		if (data?.status) {
-			requestOutcome = "success";
-		}
+		updated = true;
 	};
 </script>
 
 <Card.Root class="mx-auto w-full max-w-sm">
-	<Card.Header>
-		<Card.Title class="text-2xl">Reset Password</Card.Title>
-		<Card.Description>Please set your new password</Card.Description>
-	</Card.Header>
-	<Card.Content>
-		{#if pageError}
-			<p>
-				Invalid Password Reset request. <br /><br />Please try the
-				password reset request again:
-				<a
-					class="text-primary underline underline-offset-4 hover:text-primary/80"
-					href="/request-password-reset">password reset</a
-				>
-			</p>
-		{:else if requestOutcome === "success"}
-			<p>
-				Password changed successfully, please login using your new
-				password
-			</p>
-			<a
-				class="text-primary underline underline-offset-4 hover:text-primary/80"
-				href="/login">Login</a
+	{#if updated}
+		<Card.Header>
+			<Card.Title><h1 class="text-2xl">Password updated</h1></Card.Title>
+			<Card.Description>Sign in with your new password to continue.</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			<Button
+				class="w-full"
+				href={withDestination("/login", destination, { reset: "success" })}
+				>Sign in</Button
 			>
-		{:else}
+		</Card.Content>
+	{:else if linkInvalid}
+		<Card.Header>
+			<Card.Title class="text-2xl">Reset Password</Card.Title>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-4">
+			<p>
+				Invalid Password Reset request. This link has expired or has already
+				been used.
+			</p>
+			<Button
+				class="w-full"
+				href={withDestination("/request-password-reset", destination)}
+				>Send a new reset link</Button
+			>
+		</Card.Content>
+	{:else}
+		<Card.Header>
+			<Card.Title class="text-2xl">Reset Password</Card.Title>
+			<Card.Description>Please set your new password</Card.Description>
+		</Card.Header>
+		<Card.Content>
 			<form onsubmit={resetPassword}>
 				<Field.Field>
 					<Field.Label for="password">Password</Field.Label>
@@ -80,11 +97,7 @@
 						name="password"
 						type="password"
 						required
-						aria-invalid={(confirmPassword.length > 0 &&
-							password.length === 0) ||
-							(confirmPassword.length > 0 &&
-								password.length > 0 &&
-								!passwordsMatch)}
+						aria-invalid={showMismatch}
 					/>
 					<Field.Description
 						class={validPassword
@@ -96,40 +109,38 @@
 							: ""}
 					</Field.Description>
 				</Field.Field>
-				<Field.Field>
-					<Field.Label for="confirm-password"
-						>Confirm Password</Field.Label
-					>
+				<Field.Field data-invalid={showMismatch}>
+					<Field.Label for="confirm-password">Confirm Password</Field.Label>
 					<Input
 						id="confirm-password"
 						bind:value={confirmPassword}
 						name="confirm-password"
 						type="password"
 						required
-						aria-invalid={(confirmPassword.length > 0 &&
-							password.length === 0) ||
-							(confirmPassword.length > 0 &&
-								password.length > 0 &&
-								!passwordsMatch)}
+						aria-invalid={showMismatch}
 					/>
 					<Field.Description
 						class={passwordsMatch
 							? "text-green-600 dark:text-green-500"
 							: undefined}
 					>
-						Please confirm your password. {passwordsMatch
-							? "correct"
-							: ""}
+						Please confirm your password. {passwordsMatch ? "correct" : ""}
 					</Field.Description>
+					<Field.Error
+						errors={showMismatch ? [{ message: "Passwords don't match." }] : []}
+					/>
 				</Field.Field>
+				{#if errorMessage}
+					<p role="alert" class="text-sm text-destructive">{errorMessage}</p>
+				{/if}
 				<Field.Group>
 					<Field.Field>
-						<Button type="submit" disabled={hasError}
-							>Change password</Button
+						<Button type="submit" disabled={pending || hasError}
+							>{pending ? "Updating password…" : "Change password"}</Button
 						>
 					</Field.Field>
 				</Field.Group>
 			</form>
-		{/if}
-	</Card.Content>
+		</Card.Content>
+	{/if}
 </Card.Root>

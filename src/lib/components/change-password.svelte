@@ -13,7 +13,7 @@
     let newPassword: string = $state("");
     let confirmPassword: string = $state("");
 
-    let validCurrentPassword = $derived(newPassword.length >= 8);
+    let validCurrentPassword = $derived(currentPassword.length > 0);
     let validNewPassword = $derived(newPassword.length >= 8);
     let passwordsMatch = $derived(
         newPassword.length >= 8 &&
@@ -24,33 +24,30 @@
         !passwordsMatch || !validNewPassword || !validCurrentPassword,
     );
 
-    import { page } from "$app/state";
-    let callbackURL = page.url.searchParams.get("callbackURL");
+    let pending = $state(false);
 
-    if (!callbackURL) {
-        if (sessionStorage.getItem("redirect_to")) {
-            callbackURL = sessionStorage.getItem("redirect_to");
-        }
-    } else {
-        sessionStorage.setItem("redirect_to", callbackURL);
-    }
     const changePassword = async (e: SubmitEvent) => {
         e.preventDefault();
+        if (pending) return;
+        pending = true;
 
         const { data, error } = await authClient.changePassword({
             currentPassword: currentPassword,
             newPassword: newPassword,
             revokeOtherSessions: false,
         });
+        pending = false;
         if (data) {
-            toast("password changed successfully!");
+            toast.success("password changed successfully!");
             currentPassword = "";
             newPassword = "";
             confirmPassword = "";
         }
 
         if (error) {
-            toast(error?.message ?? "an error occurred, please try again");
+            toast.error(
+                error?.message ?? "an error occurred, please try again",
+            );
         }
     };
 </script>
@@ -66,9 +63,9 @@
         <form onsubmit={changePassword}>
             <Field.Group>
                 <Field.Field>
-                    <Field.Label for="password">Current Password</Field.Label>
+                    <Field.Label for="current-password">Current Password</Field.Label>
                     <Input
-                        id="password"
+                        id="current-password"
                         bind:value={currentPassword}
                         name="password"
                         type="password"
@@ -80,12 +77,12 @@
                         class={validCurrentPassword
                             ? "text-green-600 dark:text-green-500"
                             : undefined}
-                    ></Field.Description>
+                    >Enter your current password.</Field.Description>
                 </Field.Field>
                 <Field.Field>
-                    <Field.Label for="password">New Password</Field.Label>
+                    <Field.Label for="new-password">New Password</Field.Label>
                     <Input
-                        id="password"
+                        id="new-password"
                         bind:value={newPassword}
                         name="password"
                         type="password"
@@ -134,8 +131,8 @@
                 </Field.Field>
                 <Field.Group>
                     <Field.Field>
-                        <Button type="submit" disabled={hasError}
-                            >Change Password</Button
+                        <Button type="submit" disabled={pending || hasError}
+                            >{pending ? "Changing password…" : "Change Password"}</Button
                         >
                     </Field.Field>
                 </Field.Group>

@@ -1,4 +1,7 @@
 node_modules
+/test-results/
+/playwright-report/
+/.backups/
 
 # Output
 .output
@@ -26,3 +29,6 @@ vite.config.ts.timestamp-*
 # db
 sqlite.db
 *.db
+
+# Plaintext Kubernetes secrets must never be committed
+k8s/secrets.yaml

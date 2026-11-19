@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: auth
+  labels:
+    app: auth
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 300
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: auth
+          # Bare artifact name so Skaffold rewrites it to the tag it builds.
+          image: docker.io/bevdev1/auth
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            # adapter-node uses ORIGIN for SvelteKit's CSRF check behind Traefik.
+            - name: ORIGIN
+              value: https://auth.bevsoft.com
+            - name: BETTER_AUTH_URL
+              value: https://auth.bevsoft.com
+            # Share the session cookie across *.bevsoft.com apps.
+            - name: COOKIE_DOMAIN
+              value: bevsoft.com
+            - name: PGHOST
+              value: postgres.db.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: auth
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: auth-db
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-db
+                  key: password
+          # BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, RESEND_KEY,
+          # AUTH_EMAIL: created by hand, see README.
+          envFrom:
+            - secretRef:
+                name: auth-env
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
