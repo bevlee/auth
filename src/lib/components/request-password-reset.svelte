@@ -10,10 +10,11 @@
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { authClient } from "$lib/client";
 	import { page } from "$app/state";
-	import { resolveDestination, withDestination } from "$lib/destination";
+	import { destinationApp, resolveDestination, withDestination } from "$lib/destination";
 
 	let id = $props.id();
 	const destination = resolveDestination(page.url);
+	const app = destinationApp(destination);
 	let email: string = $state(page.url.searchParams.get("email") ?? "");
 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 	let validEmail = $derived(emailRegex.test(email));
@@ -52,10 +53,14 @@
 
 <Card.Root class="mx-auto w-full max-w-sm">
 	<Card.Header>
-		<Card.Title class="text-2xl">Reset Password</Card.Title>
-		<Card.Description
-			>Enter your email below to reset your password</Card.Description
-		>
+		<Card.Title class="text-2xl">{sent ? "Check your email" : "Reset your password"}</Card.Title>
+		<Card.Description>
+			{#if sent}
+				Open the reset link in your email, then sign in{app ? ` to return to ${app.label}` : ""}.
+			{:else}
+				Enter your email to reset your password{app ? ` and return to ${app.label}` : ""}.
+			{/if}
+		</Card.Description>
 	</Card.Header>
 	<Card.Content>
 		{#if sent}

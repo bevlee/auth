@@ -5,7 +5,7 @@
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { page } from "$app/state";
 	import { authClient } from "$lib/client";
-	import { resolveDestination, withDestination } from "$lib/destination";
+	import { destinationApp, resolveDestination, withDestination } from "$lib/destination";
 
 	let password: string = $state("");
 	let confirmPassword: string = $state("");
@@ -22,6 +22,7 @@
 	let hasError = $derived(!passwordsMatch || !validPassword);
 
 	const destination = resolveDestination(page.url);
+	const app = destinationApp(destination);
 	const token = page.url.searchParams.get("token") ?? "";
 
 	// The link is unusable if Better Auth flagged it, it has no token, or the
@@ -58,24 +59,27 @@
 	{#if updated}
 		<Card.Header>
 			<Card.Title><h1 class="text-2xl">Password updated</h1></Card.Title>
-			<Card.Description>Sign in with your new password to continue.</Card.Description>
+			<Card.Description>Sign in with your new password{app ? ` to return to ${app.label}` : " to continue"}.</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			<Button
 				class="w-full"
 				href={withDestination("/login", destination, { reset: "success" })}
-				>Sign in</Button
+				>{app ? `Sign in and return to ${app.name}` : "Sign in"}</Button
 			>
 		</Card.Content>
 	{:else if linkInvalid}
 		<Card.Header>
-			<Card.Title class="text-2xl">Reset Password</Card.Title>
+			<Card.Title class="text-2xl">Reset your password</Card.Title>
 		</Card.Header>
 		<Card.Content class="flex flex-col gap-4">
 			<p>
 				Invalid Password Reset request. This link has expired or has already
 				been used.
 			</p>
+			{#if app}
+				<p>Request a new link to reset your password and return to {app.label}.</p>
+			{/if}
 			<Button
 				class="w-full"
 				href={withDestination("/request-password-reset", destination)}
@@ -84,8 +88,8 @@
 		</Card.Content>
 	{:else}
 		<Card.Header>
-			<Card.Title class="text-2xl">Reset Password</Card.Title>
-			<Card.Description>Please set your new password</Card.Description>
+			<Card.Title class="text-2xl">Reset your password</Card.Title>
+			<Card.Description>Choose a new password{app ? ` to return to ${app.label}` : ""}.</Card.Description>
 		</Card.Header>
 		<Card.Content>
 			<form onsubmit={resetPassword}>

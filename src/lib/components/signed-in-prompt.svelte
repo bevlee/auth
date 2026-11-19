@@ -3,12 +3,12 @@
 	import { Button } from "$lib/components/ui/button/index.js";
 	import { authClient } from "$lib/client";
 	import { page } from "$app/state";
-	import { destinationLabel, resolveDestination } from "$lib/destination";
+	import { destinationApp, resolveDestination } from "$lib/destination";
 
 	let { name }: { name: string } = $props();
 
 	const destination = resolveDestination(page.url);
-	const appLabel = destinationLabel(destination);
+	const app = destinationApp(destination);
 	let errorMessage = $state("");
 
 	const switchAccount = async () => {
@@ -23,8 +23,8 @@
 	<Card.Header>
 		<Card.Title class="text-2xl">You're signed in</Card.Title>
 		<Card.Description>
-			{appLabel
-				? `Continue to ${appLabel}, or use a different account.`
+			{app
+				? `Continue to ${app.label}, or use a different account.`
 				: "Continue where you left off, or use a different account."}
 		</Card.Description>
 	</Card.Header>

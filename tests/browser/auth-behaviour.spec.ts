@@ -94,7 +94,7 @@ const resetButton = (page: Page) => page.getByRole('button', { name: 'Change pas
 test.describe('Sign in', () => {
 	test('Signed out, arriving from an app | open sign-in → names the app being continued to', async ({ page }) => {
 		await page.goto(withDestination('/login', appDestination));
-		await expect(page.getByText(/continue to tax\.bevsoft\.com/i)).toBeVisible();
+		await expect(page.getByText(/continue to Tax Time \(tax\.bevsoft\.com\)/i)).toBeVisible();
 	});
 
 	test('Signed out, visiting auth directly | sign in → defaults the destination to Account', async ({ page }) => {
@@ -258,6 +258,28 @@ test.describe('Password reset', () => {
 		expect(new URL(page.url()).searchParams.get('callbackURL')).toBe(destination);
 		await expect(page.getByLabel('Email', { exact: true })).toHaveValue(email);
 	});
+
+	for (const [host, name] of [['tax.bevsoft.com', 'Tax Time'], ['ek.bevsoft.com', 'Elemental Kingdoms'], ['other.bevsoft.com', 'other.bevsoft.com']]) {
+		test(`Reset journey copy | arriving from ${host} → names the return app throughout`, async ({ page }) => {
+			const target = `https://${host}/`;
+			const label = name === host ? host : `${name} (${host})`;
+			await page.goto(withDestination('/request-password-reset', target));
+			await expect(page.getByText(`Enter your email to reset your password and return to ${label}.`, { exact: true })).toBeVisible();
+			await page.getByLabel('Email', { exact: true }).fill(email);
+			await mockEndpoint(page, '/request-password-reset', route => route.fulfill({ json: { status: true } }));
+			await sendResetButton(page).click();
+			await expect(page.getByText('Check your email', { exact: true })).toBeVisible();
+			await expect(page.getByText(`Open the reset link in your email, then sign in to return to ${label}.`, { exact: true })).toBeVisible();
+			await page.goto(`${withDestination('/reset-password', target)}&token=copy-test-token`);
+			await expect(page.getByText(`Choose a new password to return to ${label}.`, { exact: true })).toBeVisible();
+			await fillReset(page);
+			await mockEndpoint(page, '/reset-password', route => route.fulfill({ json: { status: true } }));
+			await resetButton(page).click();
+			await page.getByRole('link', { name: `Sign in and return to ${name}`, exact: true }).click();
+			expect(new URL(page.url()).searchParams.get('callbackURL')).toBe(target);
+			await expect(page.getByText(`Password updated. Sign in with your new password to return to ${name}.`, { exact: true })).toBeVisible();
+		});
+	}
 
 	for (const account of ['existing', 'unknown']) {
 		test(`Reset request form | submit an ${account} account's email → same "check your email" message`, async ({ page }) => {

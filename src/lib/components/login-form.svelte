@@ -11,7 +11,7 @@
 	import { authClient } from "$lib/client";
 	import {
 		clearDestination,
-		destinationLabel,
+		destinationApp,
 		resolveDestination,
 		withDestination,
 	} from "$lib/destination";
@@ -29,7 +29,7 @@
 	let validPassword = $derived(password.length > 0);
 
 	const destination = resolveDestination(page.url);
-	const appLabel = destinationLabel(destination);
+	const app = destinationApp(destination);
 	const passwordWasReset = page.url.searchParams.get("reset") === "success";
 	const socialError = page.url.searchParams.get("error");
 
@@ -77,8 +77,8 @@
 	<Card.Header>
 		<Card.Title class="text-2xl">Login</Card.Title>
 		<Card.Description>
-			{#if appLabel}
-				Sign in to continue to {appLabel}
+			{#if app}
+				Sign in to continue to {app.label}
 			{:else}
 				Enter your email below to login to your account
 			{/if}
@@ -87,7 +87,7 @@
 	<Card.Content>
 		{#if passwordWasReset}
 			<p role="status" class="mb-4 text-sm text-green-600 dark:text-green-500">
-				Password updated. Sign in with your new password.
+				Password updated. Sign in with your new password{app ? ` to return to ${app.name}` : ""}.
 			</p>
 		{/if}
 		{#if socialError}

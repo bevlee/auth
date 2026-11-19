@@ -73,11 +73,17 @@ export function verificationCallback(destination: string): string {
 	return withDestination("/verify-email", destination);
 }
 
-/** The app's hostname for "continue to …" copy, or null for this site. */
-export function destinationLabel(destination: string): string | null {
+/** Display names for an app destination, or null for this site's account pages. */
+export function destinationApp(destination: string): { name: string; label: string } | null {
 	if (destination.startsWith("/")) return null;
 	try {
-		return new URL(destination).hostname;
+		const hostname = new URL(destination).hostname;
+		const names: Record<string, string> = {
+			"ek.bevsoft.com": "Elemental Kingdoms",
+			"tax.bevsoft.com": "Tax Time",
+		};
+		const name = names[hostname] ?? hostname;
+		return { name, label: name === hostname ? hostname : `${name} (${hostname})` };
 	} catch {
 		return null;
 	}
