@@ -1,5 +1,8 @@
-<script>
-    import ResetPassword from "$lib/components/reset-password.svelte";
+<script lang="ts">
+	import ResetPassword from "$lib/components/reset-password.svelte";
+	import PageShell from "$lib/components/page-shell.svelte";
 </script>
 
-<ResetPassword />
+<PageShell>
+	<ResetPassword />
+</PageShell>

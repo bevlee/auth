@@ -9,7 +9,7 @@ import { sveltekitCookies } from "better-auth/svelte-kit";
 
 const resend = new Resend(env.RESEND_KEY);
 
-type AuthEmailPurpose = "password_reset" | "email_verification";
+type AuthEmailPurpose = "password_reset";
 type AuthEmailOptions = Parameters<typeof resend.emails.send>[0];
 
 function sendAuthEmail(purpose: AuthEmailPurpose, email: AuthEmailOptions): void {
@@ -57,22 +57,17 @@ export const auth = betterAuth({
           </p>`
       });
     },
-    onPasswordReset: async ({ user}, request) => {
+    onPasswordReset: async ({ user }) => {
       console.info({ event: "auth_password_reset_completed", userId: user.id });
+      // There is no email verification step. Finishing a reset proves the user
+      // owns the inbox, so mark the email verified; that lets them later link
+      // Google to this account (see requireLocalEmailVerified below).
+      if (!user.emailVerified) {
+        const ctx = await auth.$context;
+        await ctx.internalAdapter.updateUser(user.id, { emailVerified: true });
+      }
     }
   }, 
-  emailVerification: {
-    sendOnSignUp: true,
-    autoSignInAfterVerification: true,
-    sendVerificationEmail: async ({ user, url }) => {
-      sendAuthEmail("email_verification", {
-        from: env.AUTH_EMAIL,
-        to: user.email,
-        subject: 'Verify your email address',
-        html: `Click <a href="${url}">here</a> to verify your email.`,
-      });
-    },
-  },
   socialProviders: { google: { 
             clientId: env.GOOGLE_CLIENT_ID as string, 
             clientSecret: env.GOOGLE_CLIENT_SECRET as string, 
@@ -91,7 +86,8 @@ export const auth = betterAuth({
       trustedProviders: ["google"], // add other providers as we go
       // Better Auth's default, stated explicitly: never link a provider to an
       // account whose email is unverified, so nobody can pre-register someone
-      // else's email and inherit their Google sign-in.
+      // else's email and inherit their Google sign-in. Password accounts become
+      // verified by completing a password reset (onPasswordReset above).
       requireLocalEmailVerified: true,
     },
   },

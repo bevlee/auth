@@ -1,9 +1,12 @@
 const domain = "bevsoft.com";
-const localOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:5175",
-];
+// Apps on this machine (e.g. EK on 127.0.0.1), only trusted outside production.
+// The Docker image sets NODE_ENV=production.
+const localOrigins = process.env.NODE_ENV === "production"
+  ? []
+  : [5173, 5174, 5175].flatMap((port) => [
+      `http://localhost:${port}`,
+      `http://127.0.0.1:${port}`,
+    ]);
 
 export const trustedOrigins = [`https://*.${domain}`, ...localOrigins];
 

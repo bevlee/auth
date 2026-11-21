@@ -54,7 +54,7 @@
 	};
 </script>
 
-<Card.Root class="mx-auto w-full max-w-sm">
+<Card.Root>
 	{#if updated}
 		<Card.Header>
 			<Card.Title><h1 class="text-2xl">Password updated</h1></Card.Title>
@@ -104,9 +104,7 @@
 							? "text-green-600 dark:text-green-500"
 							: undefined}
 					>
-						Must be at least 8 characters long. {validPassword
-							? "correct"
-							: ""}
+						{validPassword ? "✓ At least 8 characters" : "At least 8 characters"}
 					</Field.Description>
 				</Field.Field>
 				<Field.Field data-invalid={showMismatch}>
@@ -124,7 +122,7 @@
 							? "text-green-600 dark:text-green-500"
 							: undefined}
 					>
-						Please confirm your password. {passwordsMatch ? "correct" : ""}
+						{passwordsMatch ? "✓ Passwords match" : "Enter it again to confirm."}
 					</Field.Description>
 					<Field.Error
 						errors={showMismatch ? [{ message: "Passwords don't match." }] : []}

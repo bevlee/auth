@@ -4,9 +4,9 @@ const callbackURL = '/account?source=profile%20tests&tab=security#password';
 const email = 'profile-test@example.invalid';
 const password = 'TemporaryPassword123!';
 const withDestination = (path: string, to: string) => `${path}?callbackURL=${encodeURIComponent(to)}`;
-/** Signup sends verification links via /verify-email, which forwards to the destination. */
-const sentCallback = (kind: 'login' | 'signup', to: string) =>
-	kind === 'signup' ? withDestination('/verify-email', to) : to;
+/** Login hands the destination to Better Auth; signup (no name, no verification) navigates itself. */
+const sentPayload = (kind: 'login' | 'signup', to: string) =>
+	kind === 'signup' ? { name: '', email, password } : { email, password, callbackURL: to };
 let signedIn = false;
 const sessionBody = () => ({
 	session: { id: 's', userId: 'test-user', token: 't', expiresAt: new Date(Date.now() + 86_400_000).toISOString() },
@@ -14,12 +14,12 @@ const sessionBody = () => ({
 });
 
 type AuthScenario =
-	| { kind: 'login'; path: '/login'; endpoint: '/sign-in/email'; submit: 'Login' }
-	| { kind: 'signup'; path: '/signup'; endpoint: '/sign-up/email'; submit: 'Create Account' };
+	| { kind: 'login'; path: '/login'; endpoint: '/sign-in/email'; submit: 'Sign in' }
+	| { kind: 'signup'; path: '/signup'; endpoint: '/sign-up/email'; submit: 'Create account' };
 
 const authScenarios: AuthScenario[] = [
-	{ kind: 'login', path: '/login', endpoint: '/sign-in/email', submit: 'Login' },
-	{ kind: 'signup', path: '/signup', endpoint: '/sign-up/email', submit: 'Create Account' }
+	{ kind: 'login', path: '/login', endpoint: '/sign-in/email', submit: 'Sign in' },
+	{ kind: 'signup', path: '/signup', endpoint: '/sign-up/email', submit: 'Create account' }
 ];
 
 test.beforeEach(async ({ page }) => {
@@ -29,15 +29,18 @@ test.beforeEach(async ({ page }) => {
 			await route.fulfill({ json: signedIn ? sessionBody() : null });
 			return;
 		}
+		if (new URL(route.request().url()).pathname === '/api/auth/list-accounts') {
+			await route.fulfill({ json: [{ id: 'acc', providerId: 'credential', accountId: 'test-user', userId: 'test-user' }] });
+			return;
+		}
 		throw new Error(`Unexpected auth request: ${route.request().method()} ${route.request().url()}`);
 	});
 });
 
 async function fillAuthForm(page: Page, scenario: AuthScenario) {
-	if (scenario.kind === 'signup') await page.getByLabel('Name', { exact: true }).fill('Profile Tester');
 	await page.getByLabel('Email', { exact: true }).fill(email);
 	await page.getByLabel('Password', { exact: true }).fill(password);
-	if (scenario.kind === 'signup') await page.getByLabel('Confirm Password', { exact: true }).fill(password);
+	if (scenario.kind === 'signup') await page.getByLabel('Confirm password', { exact: true }).fill(password);
 }
 
 test('login submits an existing short password unchanged', async ({ page }) => {
@@ -48,7 +51,7 @@ test('login submits an existing short password unchanged', async ({ page }) => {
 		status: 401, json: { message: 'Test credentials rejected' }
 	}));
 	const request = page.waitForRequest('**/api/auth/sign-in/email');
-	await page.getByRole('button', { name: 'Login', exact: true }).click();
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	expect((await request).postDataJSON()).toEqual({ email, password: 'short', callbackURL: '/account' });
 	await expect(page.getByText('Test credentials rejected', { exact: true })).toBeVisible();
 });
@@ -69,12 +72,9 @@ for (const scenario of authScenarios) {
 		await expect(submit).toBeDisabled();
 		await page.getByLabel('Password', { exact: true }).fill(password);
 		if (scenario.kind === 'signup') {
-			await page.getByLabel('Name', { exact: true }).fill('A');
+			await page.getByLabel('Confirm password', { exact: true }).fill('DoesNotMatch123!');
 			await expect(submit).toBeDisabled();
-			await page.getByLabel('Name', { exact: true }).fill('Profile Tester');
-			await page.getByLabel('Confirm Password', { exact: true }).fill('DoesNotMatch123!');
-			await expect(submit).toBeDisabled();
-			await page.getByLabel('Confirm Password', { exact: true }).fill(password);
+			await page.getByLabel('Confirm password', { exact: true }).fill(password);
 		}
 		await expect(submit).toBeEnabled();
 	});
@@ -87,10 +87,7 @@ for (const scenario of authScenarios) {
 		});
 		const request = page.waitForRequest(`**/api/auth${scenario.endpoint}`);
 		await page.getByRole('button', { name: scenario.submit, exact: true }).click();
-		expect((await request).postDataJSON()).toEqual({
-			...(scenario.kind === 'signup' ? { name: 'Profile Tester' } : {}), email, password,
-			callbackURL: sentCallback(scenario.kind, '/account')
-		});
+		expect((await request).postDataJSON()).toEqual(sentPayload(scenario.kind, '/account'));
 		await expect(page.getByText('Test account rejected', { exact: true })).toBeVisible();
 		await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBeNull();
 	});
@@ -118,10 +115,7 @@ for (const scenario of authScenarios) {
 			}
 		});
 		const submit = page.getByRole('button', { name: scenario.submit, exact: true });
-		const expectedPayload = {
-			...(scenario.kind === 'signup' ? { name: 'Profile Tester' } : {}),
-			email, password, callbackURL: sentCallback(scenario.kind, callbackURL)
-		};
+		const expectedPayload = sentPayload(scenario.kind, callbackURL);
 		for (const outcome of ['error', 'success']) {
 			const request = page.waitForRequest(`**/api/auth${scenario.endpoint}`);
 			await submit.click();
@@ -132,7 +126,7 @@ for (const scenario of authScenarios) {
 			} else {
 				if (scenario.kind === 'login') {
 					await expect(page).toHaveURL('http://127.0.0.1:4179' + callbackURL);
-					await expect(page.getByRole('link', { name: 'Change Password', exact: true })).toBeVisible();
+					await expect(page.getByRole('link', { name: 'Change', exact: true })).toBeVisible();
 				} else {
 					await expect(page).toHaveURL('http://127.0.0.1:4179' + callbackURL);
 				}
@@ -144,15 +138,16 @@ for (const scenario of authScenarios) {
 
 test('callback survives navigation between login, signup, and forgot password', async ({ page }) => {
 	await page.goto(`/login?callbackURL=${encodeURIComponent(callbackURL)}`);
-	await page.getByRole('link', { name: 'Sign up', exact: true }).click();
+	await page.getByRole('link', { name: 'Create an account', exact: true }).click();
 	await expect(page).toHaveURL(/\/signup\?/);
 	await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBe(callbackURL);
-	await page.getByRole('link', { name: 'Sign in', exact: true }).click();
-	await page.getByRole('link', { name: 'Forgot your password?', exact: true }).click();
+	await page.getByRole('main').getByRole('link', { name: 'Sign in', exact: true }).click();
+	await page.getByRole('link', { name: 'Forgot password?', exact: true }).click();
 	await expect(page).toHaveURL(/\/request-password-reset\?/);
 	await page.reload();
 	await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBe(callbackURL);
-	await page.getByRole('link', { name: 'Sign up', exact: true }).click();
+	await page.getByRole('main').getByRole('link', { name: 'Sign in', exact: true }).click();
+	await expect(page).toHaveURL(/\/login\?/);
 	await expect.poll(() => page.evaluate(() => sessionStorage.getItem('redirect_to'))).toBe(callbackURL);
 });
 
@@ -165,7 +160,7 @@ test('a new callback URL replaces a previously saved callback', async ({ page })
 for (const outcome of ['success', 'error']) {
 	test(`forgot password shows the ${outcome} outcome after submitting a valid email`, async ({ page }) => {
 		await page.goto(`/login?callbackURL=${encodeURIComponent(callbackURL)}`);
-		await page.getByRole('link', { name: 'Forgot your password?', exact: true }).click();
+		await page.getByRole('link', { name: 'Forgot password?', exact: true }).click();
 		const submit = page.getByRole('button', { name: 'Send password reset email', exact: true });
 		await expect(submit).toBeDisabled();
 		await page.getByLabel('Email', { exact: true }).fill('invalid-email');
@@ -219,9 +214,9 @@ for (const outcome of ['success', 'error']) {
 			: page.getByText('Invalid token', { exact: true })).toBeVisible();
 		if (outcome === 'success') {
 			await expect(submit).toHaveCount(0);
-			await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+			await page.getByRole('main').getByRole('link', { name: 'Sign in', exact: true }).click();
 			await expect(page).toHaveURL(/\/login\?.*reset=success/);
-			await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeVisible();
+			await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
 		} else {
 			await expect(submit).toBeEnabled();
 		}
@@ -232,10 +227,10 @@ for (const outcome of ['success', 'error']) {
 	test(`change password validates the form and displays the ${outcome} outcome`, async ({ page }) => {
 		signedIn = true;
 		await page.goto('/change-password');
-		const current = page.getByLabel('Current Password', { exact: true });
-		const next = page.getByLabel('New Password', { exact: true });
-		const confirmation = page.getByLabel('Confirm New Password', { exact: true });
-		const submit = page.getByRole('button', { name: 'Change Password', exact: true });
+		const current = page.getByLabel('Current password', { exact: true });
+		const next = page.getByLabel('New password', { exact: true });
+		const confirmation = page.getByLabel('Confirm new password', { exact: true });
+		const submit = page.getByRole('button', { name: 'Update password', exact: true });
 		await expect(submit).toBeDisabled();
 		await next.fill('NewPassword123!');
 		await confirmation.fill('NewPassword123!');
@@ -260,12 +255,9 @@ for (const outcome of ['success', 'error']) {
 			currentPassword: 'CurrentPassword123!', newPassword: 'NewPassword123!', revokeOtherSessions: false
 		});
 		await expect(page.getByText(outcome === 'success'
-			? 'password changed successfully!' : 'Current password is incorrect', { exact: true })).toBeVisible();
+			? 'Password updated' : 'Current password is incorrect', { exact: true })).toBeVisible();
 		if (outcome === 'success') {
-			await expect(current).toHaveValue('');
-			await expect(next).toHaveValue('');
-			await expect(confirmation).toHaveValue('');
-			await expect(submit).toBeDisabled();
+			await expect(page).toHaveURL('http://127.0.0.1:4179/account');
 		} else {
 			await expect(current).toHaveValue('CurrentPassword123!');
 			await expect(next).toHaveValue('NewPassword123!');

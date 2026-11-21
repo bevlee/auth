@@ -38,14 +38,17 @@ const sessionBody = {
 
 const withDestination = (path: string, to = destination) =>
 	`${path}?callbackURL=${encodeURIComponent(to)}`;
-/** Verification links land on /verify-email, which forwards to the destination. */
-const verificationCallback = withDestination('/verify-email');
 
 /** Fail loudly on any auth call a test didn't expect; report signed out by default. */
 test.beforeEach(async ({ page }) => {
 	await page.route('**/api/auth/**', async (route) => {
-		if (new URL(route.request().url()).pathname === '/api/auth/get-session') {
+		const { pathname } = new URL(route.request().url());
+		if (pathname === '/api/auth/get-session') {
 			await route.fulfill({ json: null });
+			return;
+		}
+		if (pathname === '/api/auth/list-accounts') {
+			await route.fulfill({ json: [{ id: 'acc', providerId: 'credential', accountId: 'test-user', userId: 'test-user' }] });
 			return;
 		}
 		throw new Error(`Unexpected auth request: ${route.request().method()} ${route.request().url()}`);
@@ -71,10 +74,9 @@ async function fillLogin(page: Page, pw = password) {
 }
 
 async function fillSignup(page: Page) {
-	await page.getByLabel('Name', { exact: true }).fill('Behaviour Tester');
 	await page.getByLabel('Email', { exact: true }).fill(email);
 	await page.getByLabel('Password', { exact: true }).fill(password);
-	await page.getByLabel('Confirm Password', { exact: true }).fill(password);
+	await page.getByLabel('Confirm password', { exact: true }).fill(password);
 }
 
 async function fillReset(page: Page) {
@@ -82,8 +84,8 @@ async function fillReset(page: Page) {
 	await page.getByLabel('Confirm Password', { exact: true }).fill(newPassword);
 }
 
-const loginButton = (page: Page) => page.getByRole('button', { name: 'Login', exact: true });
-const signupButton = (page: Page) => page.getByRole('button', { name: 'Create Account', exact: true });
+const loginButton = (page: Page) => page.getByRole('button', { name: 'Sign in', exact: true });
+const signupButton = (page: Page) => page.getByRole('button', { name: 'Create account', exact: true });
 const sendResetButton = (page: Page) => page.getByRole('button', { name: 'Send password reset email', exact: true });
 const resetButton = (page: Page) => page.getByRole('button', { name: 'Change password', exact: true });
 
@@ -95,6 +97,12 @@ test.describe('Sign in', () => {
 	test('Signed out, arriving from an app | open sign-in → names the app being continued to', async ({ page }) => {
 		await page.goto(withDestination('/login', appDestination));
 		await expect(page.getByText(/continue to tax\.bevsoft\.com/i)).toBeVisible();
+	});
+
+	test('Signed out, arriving from EK | open sign-in → names EK, not its hostname', async ({ page }) => {
+		await page.goto(withDestination('/login', 'https://ek.bevsoft.com/?menu=account'));
+		await expect(page.getByText('Sign in to continue to EK', { exact: true })).toBeVisible();
+		await expect(page.locator('header')).toContainText('for EK');
 	});
 
 	test('Signed out, visiting auth directly | sign in → defaults the destination to Account', async ({ page }) => {
@@ -160,7 +168,7 @@ test.describe('Sign in', () => {
 			json: { url: origin + '/fake-google', redirect: true }
 		}));
 		const request = page.waitForRequest('**/api/auth/sign-in/social');
-		await page.getByRole('button', { name: 'Login with Google' }).click();
+		await page.getByRole('button', { name: 'Continue with Google' }).click();
 		expect((await request).postDataJSON()).toMatchObject({ provider: 'google', callbackURL: destination });
 	});
 
@@ -168,32 +176,34 @@ test.describe('Sign in', () => {
 		await page.goto(withDestination('/login'));
 		await mockEndpoint(page, '/sign-in/social', (route) => route.fulfill({ status: 400, json: { message: 'stop' } }));
 		const request = page.waitForRequest('**/api/auth/sign-in/social');
-		await page.getByRole('button', { name: 'Login with Google' }).click();
+		await page.getByRole('button', { name: 'Continue with Google' }).click();
 		expect((await request).postDataJSON()).toMatchObject({ errorCallbackURL: expect.stringContaining('/login') });
 
 		await page.goto('/login?error=access_denied');
 		await expect(page.getByRole('alert')).toContainText(/google/i);
-		await expect(page.getByRole('button', { name: 'Login with Google' })).toBeEnabled();
+		await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeEnabled();
 		expect(await storedDestination(page)).toBe(destination);
 	});
 
-	test('Sign-in form | choose "Create account" → signup keeps the destination', async ({ page }) => {
+	test('Sign-in form | choose "Create an account" → signup keeps the destination', async ({ page }) => {
 		await page.goto(withDestination('/login'));
-		await page.getByRole('link', { name: 'Sign up', exact: true }).click();
+		await page.getByRole('link', { name: 'Create an account', exact: true }).click();
 		await expect(page).toHaveURL(/\/signup/);
-		await fillSignup(page);
-		await mockEndpoint(page, '/sign-up/email', (route) => route.fulfill({ status: 400, json: { message: 'stop' } }));
-		const request = page.waitForRequest('**/api/auth/sign-up/email');
-		await signupButton(page).click();
-		expect((await request).postDataJSON()).toMatchObject({ callbackURL: verificationCallback });
+		expect(new URL(page.url()).searchParams.get('callbackURL')).toBe(destination);
+		expect(await storedDestination(page)).toBe(destination);
+	});
+
+	test('Google sign-in | email already has a password account → explains to sign in with the password', async ({ page }) => {
+		await page.goto(withDestination('/login') + '&error=account_not_linked');
+		await expect(page.getByRole('alert')).toContainText(/already exists\. sign in with your password/i);
 	});
 });
 
 // ---------------------------------------------------------------------------
-// Sign up and email verification
+// Sign up
 // ---------------------------------------------------------------------------
 
-test.describe('Sign up and verification', () => {
+test.describe('Sign up', () => {
 	test('Signup form | submit valid details → signed in and sent to the destination', async ({ page }) => {
 		let created = false;
 		await mockEndpoint(page, '/get-session', (route) => route.fulfill({ json: created ? sessionBody : null }));
@@ -207,6 +217,16 @@ test.describe('Sign up and verification', () => {
 		await expect(page).toHaveURL(origin + destination);
 	});
 
+	test('Signup form | no name asked → account created with an empty name, no verification callback', async ({ page }) => {
+		await page.goto(withDestination('/signup'));
+		await expect(page.getByLabel('Name', { exact: true })).toHaveCount(0);
+		await fillSignup(page);
+		await mockEndpoint(page, '/sign-up/email', (route) => route.fulfill({ status: 400, json: { message: 'stop' } }));
+		const request = page.waitForRequest('**/api/auth/sign-up/email');
+		await signupButton(page).click();
+		expect((await request).postDataJSON()).toEqual({ name: '', email, password });
+	});
+
 	test('Signup form | invalid email → field explains the problem', async ({ page }) => {
 		await page.goto('/signup');
 		await page.getByLabel('Email', { exact: true }).fill('not-an-email');
@@ -217,9 +237,8 @@ test.describe('Sign up and verification', () => {
 	test('Signup form | mismatched passwords → field explains the mismatch, other fields kept', async ({ page }) => {
 		await page.goto('/signup');
 		await fillSignup(page);
-		await page.getByLabel('Confirm Password', { exact: true }).fill('DoesNotMatch123!');
+		await page.getByLabel('Confirm password', { exact: true }).fill('DoesNotMatch123!');
 		await expect(page.getByText(/passwords (do not|don't) match/i)).toBeVisible();
-		await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Behaviour Tester');
 		await expect(page.getByLabel('Email', { exact: true })).toHaveValue(email);
 		await expect(signupButton(page)).toBeDisabled();
 	});
@@ -236,13 +255,6 @@ test.describe('Sign up and verification', () => {
 		await expect(signupButton(page)).toBeEnabled();
 	});
 
-	test.fixme('Verification email | open valid link → verified, signed in, continues to destination (journey)', () => {});
-
-	test('Verification email | open expired or invalid link → explains, offers a new verification email', async ({ page }) => {
-		await page.goto('/verify-email?error=invalid_token');
-		await expect(page.getByText(/link has expired or is invalid/i)).toBeVisible();
-		await expect(page.getByRole('button', { name: /send a new verification email/i })).toBeVisible();
-	});
 });
 
 // ---------------------------------------------------------------------------
@@ -253,7 +265,7 @@ test.describe('Password reset', () => {
 	test('Sign-in form | choose "Forgot password?" → email prefilled, destination in the URL', async ({ page }) => {
 		await page.goto(withDestination('/login'));
 		await page.getByLabel('Email', { exact: true }).fill(email);
-		await page.getByRole('link', { name: 'Forgot your password?', exact: true }).click();
+		await page.getByRole('link', { name: 'Forgot password?', exact: true }).click();
 		await expect(page).toHaveURL(/\/request-password-reset/);
 		expect(new URL(page.url()).searchParams.get('callbackURL')).toBe(destination);
 		await expect(page.getByLabel('Email', { exact: true })).toHaveValue(email);
@@ -345,7 +357,7 @@ test.describe('Password reset', () => {
 		await mockEndpoint(page, '/reset-password', (route) => route.fulfill({ json: { status: true } }));
 		await resetButton(page).click();
 		await expect(page.getByRole('heading', { name: /password updated/i })).toBeVisible();
-		await expect(page.getByRole('link', { name: /sign in/i })).toBeVisible();
+		await expect(page.getByRole('main').getByRole('link', { name: /sign in/i })).toBeVisible();
 	});
 
 	test('Password updated | choose "Sign in" → sign-in shows the success message and keeps the destination', async ({ page }) => {
@@ -353,7 +365,7 @@ test.describe('Password reset', () => {
 		await fillReset(page);
 		await mockEndpoint(page, '/reset-password', (route) => route.fulfill({ json: { status: true } }));
 		await resetButton(page).click();
-		await page.getByRole('link', { name: /sign in/i }).click();
+		await page.getByRole('main').getByRole('link', { name: /sign in/i }).click();
 		await expect(page).toHaveURL(/\/login/);
 		expect(new URL(page.url()).searchParams.get('callbackURL')).toBe(destination);
 		await expect(page.getByText(/password updated/i)).toBeVisible();
@@ -392,13 +404,13 @@ test.describe('Session-aware pages', () => {
 
 test.describe('Change password', () => {
 	async function fillChange(page: Page) {
-		await page.getByLabel('Current Password', { exact: true }).fill(password);
-		await page.getByLabel('New Password', { exact: true }).fill(newPassword);
-		await page.getByLabel('Confirm New Password', { exact: true }).fill(newPassword);
+		await page.getByLabel('Current password', { exact: true }).fill(password);
+		await page.getByLabel('New password', { exact: true }).fill(newPassword);
+		await page.getByLabel('Confirm new password', { exact: true }).fill(newPassword);
 	}
-	const changeButton = (page: Page) => page.getByRole('button', { name: 'Change Password', exact: true });
+	const changeButton = (page: Page) => page.getByRole('button', { name: 'Update password', exact: true });
 
-	test('Signed in, changing password | wrong current password → error, entries kept', async ({ page }) => {
+	test('Signed in, changing password | wrong current password → error under that field, entries kept', async ({ page }) => {
 		await signedIn(page);
 		await page.goto('/change-password');
 		await fillChange(page);
@@ -406,11 +418,11 @@ test.describe('Change password', () => {
 			status: 400, json: { code: 'INVALID_PASSWORD', message: 'Invalid password' }
 		}));
 		await changeButton(page).click();
-		await expect(page.getByText('Invalid password', { exact: true })).toBeVisible();
-		await expect(page.getByLabel('Current Password', { exact: true })).toHaveValue(password);
+		await expect(page.getByText('Incorrect password', { exact: true })).toBeVisible();
+		await expect(page.getByLabel('Current password', { exact: true })).toHaveValue(password);
 	});
 
-	test('Signed in, changing password | valid passwords → success confirmed, form cleared', async ({ page }) => {
+	test('Signed in, changing password | valid passwords → success confirmed, back on Account', async ({ page }) => {
 		await signedIn(page);
 		await page.goto('/change-password');
 		await fillChange(page);
@@ -418,8 +430,8 @@ test.describe('Change password', () => {
 			json: { token: 'test-token', user: sessionBody.user }
 		}));
 		await changeButton(page).click();
-		await expect(page.getByText(/password changed successfully/i)).toBeVisible();
-		await expect(page.getByLabel('New Password', { exact: true })).toHaveValue('');
+		await expect(page.getByText('Password updated', { exact: true })).toBeVisible();
+		await expect(page).toHaveURL(origin + '/account');
 	});
 
 	test('Changing password | submit → other devices stay signed in', async ({ page }) => {
@@ -447,17 +459,17 @@ test.describe('Sign out', () => {
 			await route.fulfill({ json: { success: true } });
 		});
 		await page.goto('/');
-		await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
-		await expect(page.getByRole('link', { name: 'Login', exact: true })).toBeVisible();
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+		await expect(page.getByRole('link', { name: 'Sign in', exact: true }).first()).toBeVisible();
 	});
 
 	test('Sign-out fails | choose "Sign out" → error shown, still signed in', async ({ page }) => {
 		await signedIn(page);
 		await mockEndpoint(page, '/sign-out', (route) => route.fulfill({ status: 500, json: { message: 'Server error' } }));
 		await page.goto('/account');
-		await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 		await expect(page.getByText(/couldn't sign (you )?out|sign out failed/i)).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Sign Out', exact: true })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
 	});
 });
 
