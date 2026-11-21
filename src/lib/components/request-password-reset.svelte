@@ -51,7 +51,7 @@
 	};
 </script>
 
-<Card.Root class="mx-auto w-full max-w-sm">
+<Card.Root>
 	<Card.Header>
 		<Card.Title class="text-2xl">{sent ? "Check your email" : "Reset your password"}</Card.Title>
 		<Card.Description>
@@ -110,14 +110,7 @@
 						>
 
 						<FieldDescription class="text-center">
-							Don't have an account? <a href={withDestination("/signup", destination)}
-								>Sign up</a
-							>
-						</FieldDescription>
-						<FieldDescription class="text-center">
-							Sign in to your account? <a href={withDestination("/login", destination)}
-								>Sign in</a
-							>
+							Remembered it? <a href={withDestination("/login", destination)}>Sign in</a>
 						</FieldDescription>
 					</Field>
 				</FieldGroup>

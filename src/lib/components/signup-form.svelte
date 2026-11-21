@@ -3,41 +3,35 @@
 	import * as Field from "$lib/components/ui/field/index.js";
 	import { Button } from "$lib/components/ui/button/index.js";
 	import { Input } from "$lib/components/ui/input/index.js";
+	import FormAlert from "$lib/components/form-alert.svelte";
+	import GoogleButton from "$lib/components/google-button.svelte";
+	import SignedIn from "$lib/components/signed-in.svelte";
 	import { authClient } from "$lib/client";
-	import type { ComponentProps } from "svelte";
 	import { page } from "$app/state";
 	import {
 		clearDestination,
+		destinationApp,
 		resolveDestination,
-		verificationCallback,
 		withDestination,
 	} from "$lib/destination";
 
-	let { ...restProps }: ComponentProps<typeof Card.Root> = $props();
+	const id = $props.id();
+	let email = $state("");
+	let password = $state("");
+	let confirmPassword = $state("");
 
-	let password: string = $state("");
-	let confirmPassword: string = $state("");
-	let email: string = $state("");
-	let name: string = $state("");
 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-	let validName = $derived(name.length > 1);
-	let validEmail = $derived(emailRegex.test(email));
-	let validPassword = $derived(password.length >= 8);
-	let passwordsMatch = $derived(
-		password.length >= 8 &&
-			confirmPassword.length >= 8 &&
-			password === confirmPassword,
-	);
-	let showMismatch = $derived(
-		confirmPassword.length > 0 && password !== confirmPassword,
-	);
-	let hasError = $derived(
-		!passwordsMatch || !validName || !validEmail || !validPassword,
-	);
+	const validEmail = $derived(emailRegex.test(email));
+	const validPassword = $derived(password.length >= 8);
+	const passwordsMatch = $derived(validPassword && password === confirmPassword);
+	const showEmailError = $derived(email.length > 0 && !validEmail);
+	const showMismatch = $derived(confirmPassword.length > 0 && password !== confirmPassword);
 
 	const destination = resolveDestination(page.url);
+	const appLabel = destinationApp(destination)?.name ?? null;
 
 	let pending = $state(false);
+	let signedIn = $state(false);
 	let errorMessage = $state("");
 
 	const signUp = async (e: SubmitEvent) => {
@@ -45,138 +39,108 @@
 		if (pending) return;
 		pending = true;
 		errorMessage = "";
-		const { error } = await authClient.signUp.email({
-			name,
-			email,
-			password,
-			callbackURL: verificationCallback(destination),
-		});
+		// No name at signup: apps that need a display name (e.g. multiplayer)
+		// ask for it later. No verification email either; users are signed in now.
+		const { error } = await authClient.signUp.email({ name: "", email, password });
 		if (error) {
 			pending = false;
 			errorMessage = error.message ?? "An error occurred, please try again.";
 			return;
 		}
-		// Signed in straight away; the verification email (whose link goes via
-		// /verify-email) is optional. Keep the button disabled while leaving.
 		clearDestination();
+		signedIn = true;
 		window.location.href = destination;
-	};
-
-	const signUpWithGoogle = async () => {
-		errorMessage = "";
-		const { error } = await authClient.signIn.social({
-			provider: "google",
-			callbackURL: destination,
-			errorCallbackURL: withDestination("/login", destination),
-		});
-		if (error) {
-			errorMessage = "We couldn't start Google sign-in. Please try again.";
-		}
 	};
 </script>
 
-<Card.Root {...restProps}>
-	<Card.Header>
-		<Card.Title>Create an account</Card.Title>
-		<Card.Description
-			>Enter your information below to create your account</Card.Description
-		>
-	</Card.Header>
-	<Card.Content>
-		<form onsubmit={signUp}>
-			<Field.Group>
-				<Field.Field>
-					<Field.Label for="name">Name</Field.Label>
-					<Input
-						id="name"
-						bind:value={name}
-						name="name"
-						type="text"
-						placeholder="John Doe"
-						required
-					/>
-				</Field.Field>
-				<Field.Field data-invalid={email.length > 0 && !validEmail}>
-					<Field.Label for="email">Email</Field.Label>
-					<Input
-						id="email"
-						bind:value={email}
-						name="email"
-						type="email"
-						placeholder="m@example.com"
-						aria-invalid={email.length > 0 && !validEmail}
-						required
-					/>
-					<Field.Description>
-						We'll use this to contact you. We will not share your email
-						with anyone else.
-					</Field.Description>
-					<Field.Error
-						errors={email.length > 0 && !validEmail
-							? [{ message: "Enter a valid email address." }]
-							: []}
-					/>
-				</Field.Field>
-				<Field.Field>
-					<Field.Label for="password">Password</Field.Label>
-					<Input
-						id="password"
-						bind:value={password}
-						name="password"
-						type="password"
-						required
-						aria-invalid={showMismatch}
-					/>
-					<Field.Description
-						class={validPassword
-							? "text-green-600 dark:text-green-500"
-							: undefined}
-					>
-						Must be at least 8 characters long. {validPassword
-							? "correct"
-							: ""}
-					</Field.Description>
-				</Field.Field>
-				<Field.Field data-invalid={showMismatch}>
-					<Field.Label for="confirm-password">Confirm Password</Field.Label>
-					<Input
-						id="confirm-password"
-						bind:value={confirmPassword}
-						name="confirm-password"
-						type="password"
-						required
-						aria-invalid={showMismatch}
-					/>
-					<Field.Description
-						class={passwordsMatch
-							? "text-green-600 dark:text-green-500"
-							: undefined}
-					>
-						Please confirm your password. {passwordsMatch ? "correct" : ""}
-					</Field.Description>
-					<Field.Error
-						errors={showMismatch ? [{ message: "Passwords don't match." }] : []}
-					/>
-				</Field.Field>
-				{#if errorMessage}
-					<p role="alert" class="text-sm text-destructive">{errorMessage}</p>
-				{/if}
+{#if signedIn}
+	<SignedIn {appLabel} />
+{:else}
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-2xl">Create your Bevsoft account</Card.Title>
+			<Card.Description>
+				{appLabel
+					? `You'll use it to sign in to ${appLabel} and other Bevsoft apps.`
+					: "One account for every Bevsoft app."}
+			</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			<form onsubmit={signUp}>
 				<Field.Group>
 					<Field.Field>
-						<Button type="submit" disabled={pending || hasError}
-							>{pending ? "Creating account…" : "Create Account"}</Button
-						>
-						<Button variant="outline" type="button" onclick={signUpWithGoogle}>
-							Sign up with Google
-						</Button>
-						<Field.Description class="px-6 text-center">
-							Already have an account? <a href={withDestination("/login", destination)}
-								>Sign in</a
-							>
+						<GoogleButton {destination} bind:errorMessage />
+					</Field.Field>
+					<Field.Separator>or</Field.Separator>
+					{#if errorMessage}
+						<FormAlert>{errorMessage}</FormAlert>
+					{/if}
+					<Field.Field data-invalid={showEmailError}>
+						<Field.Label for="email-{id}">Email</Field.Label>
+						<Input
+							id="email-{id}"
+							bind:value={email}
+							name="email"
+							type="email"
+							autocomplete="email"
+							placeholder="m@example.com"
+							aria-invalid={showEmailError}
+							required
+						/>
+						<Field.Error
+							errors={showEmailError ? [{ message: "Enter a valid email address." }] : []}
+						/>
+					</Field.Field>
+					<Field.Field>
+						<Field.Label for="password-{id}">Password</Field.Label>
+						<Input
+							id="password-{id}"
+							bind:value={password}
+							name="password"
+							type="password"
+							autocomplete="new-password"
+							aria-invalid={showMismatch}
+							required
+						/>
+						<Field.Description class={validPassword ? "text-green-600 dark:text-green-500" : ""}>
+							{validPassword ? "✓ At least 8 characters" : "At least 8 characters"}
 						</Field.Description>
 					</Field.Field>
+					<Field.Field data-invalid={showMismatch}>
+						<Field.Label for="confirm-password-{id}">Confirm password</Field.Label>
+						<Input
+							id="confirm-password-{id}"
+							bind:value={confirmPassword}
+							name="confirm-password"
+							type="password"
+							autocomplete="new-password"
+							aria-invalid={showMismatch}
+							required
+						/>
+						{#if passwordsMatch}
+							<Field.Description class="text-green-600 dark:text-green-500">
+								✓ Passwords match
+							</Field.Description>
+						{/if}
+						<Field.Error errors={showMismatch ? [{ message: "Passwords don't match." }] : []} />
+					</Field.Field>
+					<Field.Field>
+						<Button
+							type="submit"
+							class="w-full"
+							disabled={pending || !validEmail || !passwordsMatch}
+							>{pending ? "Creating account…" : "Create account"}</Button
+						>
+						<p class="text-center text-sm text-muted-foreground">
+							Already have an account?
+							<a
+								class="text-foreground underline underline-offset-4"
+								href={withDestination("/login", destination)}>Sign in</a
+							>
+						</p>
+					</Field.Field>
 				</Field.Group>
-			</Field.Group>
-		</form>
-	</Card.Content>
-</Card.Root>
+			</form>
+		</Card.Content>
+	</Card.Root>
+{/if}

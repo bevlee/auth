@@ -1,142 +1,110 @@
 <script lang="ts">
-    import * as Card from "$lib/components/ui/card/index.js";
-    import * as Field from "$lib/components/ui/field/index.js";
-    import { Button } from "$lib/components/ui/button/index.js";
-    import { Input } from "$lib/components/ui/input/index.js";
-    import { authClient } from "$lib/client";
-    import type { ComponentProps } from "svelte";
-    import { toast } from "svelte-sonner";
+	import * as Card from "$lib/components/ui/card/index.js";
+	import * as Field from "$lib/components/ui/field/index.js";
+	import { Button } from "$lib/components/ui/button/index.js";
+	import { Input } from "$lib/components/ui/input/index.js";
+	import FormAlert from "$lib/components/form-alert.svelte";
+	import { authClient } from "$lib/client";
+	import { goto } from "$app/navigation";
+	import { toast } from "svelte-sonner";
 
-    let { ...restProps }: ComponentProps<typeof Card.Root> = $props();
+	const id = $props.id();
+	let currentPassword = $state("");
+	let newPassword = $state("");
+	let confirmPassword = $state("");
+	let currentPasswordError = $state("");
+	let errorMessage = $state("");
+	let pending = $state(false);
 
-    let currentPassword: string = $state("");
-    let newPassword: string = $state("");
-    let confirmPassword: string = $state("");
+	const validNewPassword = $derived(newPassword.length >= 8);
+	const passwordsMatch = $derived(validNewPassword && newPassword === confirmPassword);
+	const showMismatch = $derived(confirmPassword.length > 0 && newPassword !== confirmPassword);
+	const canSubmit = $derived(currentPassword.length > 0 && passwordsMatch && !pending);
 
-    let validCurrentPassword = $derived(currentPassword.length > 0);
-    let validNewPassword = $derived(newPassword.length >= 8);
-    let passwordsMatch = $derived(
-        newPassword.length >= 8 &&
-            confirmPassword.length >= 8 &&
-            newPassword === confirmPassword,
-    );
-    let hasError = $derived(
-        !passwordsMatch || !validNewPassword || !validCurrentPassword,
-    );
-
-    let pending = $state(false);
-
-    const changePassword = async (e: SubmitEvent) => {
-        e.preventDefault();
-        if (pending) return;
-        pending = true;
-
-        const { data, error } = await authClient.changePassword({
-            currentPassword: currentPassword,
-            newPassword: newPassword,
-            revokeOtherSessions: false,
-        });
-        pending = false;
-        if (data) {
-            toast.success("password changed successfully!");
-            currentPassword = "";
-            newPassword = "";
-            confirmPassword = "";
-        }
-
-        if (error) {
-            toast.error(
-                error?.message ?? "an error occurred, please try again",
-            );
-        }
-    };
+	const changePassword = async (e: SubmitEvent) => {
+		e.preventDefault();
+		if (pending) return;
+		pending = true;
+		currentPasswordError = "";
+		errorMessage = "";
+		const { error } = await authClient.changePassword({
+			currentPassword,
+			newPassword,
+			revokeOtherSessions: false,
+		});
+		pending = false;
+		if (error) {
+			if (error.code === "INVALID_PASSWORD") currentPasswordError = "Incorrect password";
+			else errorMessage = error.message ?? "Something went wrong. Please try again.";
+			return;
+		}
+		toast.success("Password updated");
+		await goto("/account");
+	};
 </script>
 
-<Card.Root {...restProps}>
-    <Card.Header>
-        <Card.Title>Change Password</Card.Title>
-        <Card.Description
-            >Enter your current and new desired password</Card.Description
-        >
-    </Card.Header>
-    <Card.Content>
-        <form onsubmit={changePassword}>
-            <Field.Group>
-                <Field.Field>
-                    <Field.Label for="current-password">Current Password</Field.Label>
-                    <Input
-                        id="current-password"
-                        bind:value={currentPassword}
-                        name="password"
-                        type="password"
-                        required
-                        aria-invalid={confirmPassword.length > 0 &&
-                            currentPassword.length === 0}
-                    />
-                    <Field.Description
-                        class={validCurrentPassword
-                            ? "text-green-600 dark:text-green-500"
-                            : undefined}
-                    >Enter your current password.</Field.Description>
-                </Field.Field>
-                <Field.Field>
-                    <Field.Label for="new-password">New Password</Field.Label>
-                    <Input
-                        id="new-password"
-                        bind:value={newPassword}
-                        name="password"
-                        type="password"
-                        required
-                        aria-invalid={(confirmPassword.length > 0 &&
-                            newPassword.length === 0) ||
-                            (confirmPassword.length > 0 &&
-                                newPassword.length > 0 &&
-                                !passwordsMatch)}
-                    />
-                    <Field.Description
-                        class={validNewPassword
-                            ? "text-green-600 dark:text-green-500"
-                            : undefined}
-                    >
-                        Must be at least 8 characters long. {validNewPassword
-                            ? "correct"
-                            : ""}
-                    </Field.Description>
-                </Field.Field>
-                <Field.Field>
-                    <Field.Label for="confirm-password"
-                        >Confirm New Password</Field.Label
-                    >
-                    <Input
-                        id="confirm-password"
-                        bind:value={confirmPassword}
-                        name="confirm-password"
-                        type="password"
-                        required
-                        aria-invalid={(confirmPassword.length > 0 &&
-                            newPassword.length === 0) ||
-                            (confirmPassword.length > 0 &&
-                                newPassword.length > 0 &&
-                                !passwordsMatch)}
-                    />
-                    <Field.Description
-                        class={passwordsMatch
-                            ? "text-green-600 dark:text-green-500"
-                            : undefined}
-                    >
-                        Please confirm your password. {passwordsMatch
-                            ? "correct"
-                            : ""}
-                    </Field.Description>
-                </Field.Field>
-                <Field.Group>
-                    <Field.Field>
-                        <Button type="submit" disabled={pending || hasError}
-                            >{pending ? "Changing password…" : "Change Password"}</Button
-                        >
-                    </Field.Field>
-                </Field.Group>
-            </Field.Group>
-        </form>
-    </Card.Content>
+<Card.Root>
+	<Card.Header>
+		<a href="/account" class="mb-1 text-sm text-muted-foreground hover:text-foreground">← Account</a>
+		<Card.Title class="text-2xl">Change password</Card.Title>
+	</Card.Header>
+	<Card.Content>
+		<form onsubmit={changePassword}>
+			<Field.Group>
+				{#if errorMessage}
+					<FormAlert>{errorMessage}</FormAlert>
+				{/if}
+				<Field.Field data-invalid={!!currentPasswordError}>
+					<Field.Label for="current-password-{id}">Current password</Field.Label>
+					<Input
+						id="current-password-{id}"
+						bind:value={currentPassword}
+						oninput={() => (currentPasswordError = "")}
+						name="current-password"
+						type="password"
+						autocomplete="current-password"
+						aria-invalid={!!currentPasswordError}
+						required
+					/>
+					<Field.Error errors={currentPasswordError ? [{ message: currentPasswordError }] : []} />
+				</Field.Field>
+				<Field.Field>
+					<Field.Label for="new-password-{id}">New password</Field.Label>
+					<Input
+						id="new-password-{id}"
+						bind:value={newPassword}
+						name="new-password"
+						type="password"
+						autocomplete="new-password"
+						aria-invalid={showMismatch}
+						required
+					/>
+					<Field.Description class={validNewPassword ? "text-green-600 dark:text-green-500" : ""}>
+						{validNewPassword ? "✓ At least 8 characters" : "At least 8 characters"}
+					</Field.Description>
+				</Field.Field>
+				<Field.Field data-invalid={showMismatch}>
+					<Field.Label for="confirm-password-{id}">Confirm new password</Field.Label>
+					<Input
+						id="confirm-password-{id}"
+						bind:value={confirmPassword}
+						name="confirm-password"
+						type="password"
+						autocomplete="new-password"
+						aria-invalid={showMismatch}
+						required
+					/>
+					{#if passwordsMatch}
+						<Field.Description class="text-green-600 dark:text-green-500">
+							✓ Passwords match
+						</Field.Description>
+					{/if}
+					<Field.Error errors={showMismatch ? [{ message: "Passwords don't match." }] : []} />
+				</Field.Field>
+				<Button type="submit" class="w-full" disabled={!canSubmit}>
+					{pending ? "Updating password…" : "Update password"}
+				</Button>
+			</Field.Group>
+		</form>
+	</Card.Content>
 </Card.Root>

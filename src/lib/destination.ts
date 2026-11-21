@@ -6,15 +6,26 @@
  * survives same-tab navigation that drops the query (reloads, header links).
  */
 
+import { dev } from "$app/environment";
+
 export const DEFAULT_DESTINATION = "/account";
 
 const STORAGE_KEY = "redirect_to";
 const APP_DOMAIN = "bevsoft.com";
-const LOCAL_ORIGINS = [
-	"http://localhost:5173",
-	"http://localhost:5174",
-	"http://localhost:5175",
-];
+/** Apps on this machine (e.g. EK on 127.0.0.1), only trusted while developing. */
+const LOCAL_ORIGINS = dev
+	? [5173, 5174, 5175].flatMap((port) => [
+			`http://localhost:${port}`,
+			`http://127.0.0.1:${port}`,
+		])
+	: [];
+
+/** Display names for apps that send users here; others show their hostname. */
+const APP_NAMES: Record<string, string> = {
+	"ek.bevsoft.com": "Elemental Kingdoms",
+	"ek-dev.bevsoft.com": "Elemental Kingdoms (dev)",
+	"tax.bevsoft.com": "Tax Time",
+};
 
 /** Same-site paths, https bevsoft.com apps, and local dev apps. */
 export function isSafeDestination(value: string): boolean {
@@ -46,6 +57,14 @@ export function resolveDestination(url: URL): string {
 	return stored && isSafeDestination(stored) ? stored : DEFAULT_DESTINATION;
 }
 
+/** Like resolveDestination, but read-only (for the header, which shows it on every page). */
+export function peekDestination(url: URL): string {
+	const requested = url.searchParams.get("callbackURL");
+	if (requested !== null) return isSafeDestination(requested) ? requested : DEFAULT_DESTINATION;
+	const stored = sessionStorage.getItem(STORAGE_KEY);
+	return stored && isSafeDestination(stored) ? stored : DEFAULT_DESTINATION;
+}
+
 /** Call once the destination has been handed to Better Auth successfully. */
 export function clearDestination(): void {
 	sessionStorage.removeItem(STORAGE_KEY);
@@ -65,24 +84,15 @@ export function withDestination(
 }
 
 /**
- * Where a verification link lands. Better Auth sends both success and
- * `?error=` to this URL, so it points at our /verify-email page, which
- * explains failures and forwards successes to the real destination.
+ * Display names for an app destination, or null for this site's account pages.
+ * `name` is for headings and buttons; `label` adds the hostname where it helps
+ * the user check which site they're returning to.
  */
-export function verificationCallback(destination: string): string {
-	return withDestination("/verify-email", destination);
-}
-
-/** Display names for an app destination, or null for this site's account pages. */
 export function destinationApp(destination: string): { name: string; label: string } | null {
 	if (destination.startsWith("/")) return null;
 	try {
 		const hostname = new URL(destination).hostname;
-		const names: Record<string, string> = {
-			"ek.bevsoft.com": "Elemental Kingdoms",
-			"tax.bevsoft.com": "Tax Time",
-		};
-		const name = names[hostname] ?? hostname;
+		const name = APP_NAMES[hostname] ?? hostname;
 		return { name, label: name === hostname ? hostname : `${name} (${hostname})` };
 	} catch {
 		return null;
